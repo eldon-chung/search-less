@@ -31,3 +31,4 @@
 *.out
 *.app
 src/main.cpp
+build/src/main.json

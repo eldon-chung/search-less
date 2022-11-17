@@ -11,6 +11,7 @@ endif
 CXXWARNINGS := -Wall -Wextra -pedantic
 CXXWERROR := -Werror
 CXXWERROR += -Wno-error=unused-parameter
+CXXWERROR += -Wno-error=unused-private-field
 CXXWERROR += -Wno-error=unused-variable
 CXXWERROR += -Wno-error=unused-function
 CXXWERROR += -Wconversion
