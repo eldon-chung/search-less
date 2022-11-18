@@ -31,6 +31,8 @@ class View {
     View(View &&) = delete;
     View &operator=(View &&) = delete;
     ~View() {
+        delwin(m_command_window_ptr);
+        endwin(); // here's how you finish up ncurses mode
     }
 
     static View initialize(Model *model) {
