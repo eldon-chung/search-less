@@ -185,9 +185,9 @@ class Model {
         // get the left and right bounds
         size_t first_line_length = m_contents.find_first_of("\n");
         if (first_line_length == std::string::npos) {
-            first_line_length++;
-        } else {
             first_line_length = m_contents.length();
+        } else {
+            first_line_length++;
         }
 
         LineIt to_return{this, 0, first_line_length};
