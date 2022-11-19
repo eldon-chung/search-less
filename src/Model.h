@@ -104,10 +104,16 @@ class Model {
                          // TODO: make it an iterator haha
         size_t m_length;
 
-        bool operator==(const LineIt &other) const = default;
+        bool operator==(const LineIt &other) const {
+            return m_offset == other.m_offset && m_length == other.m_length;
+        }
 
         std::string_view operator*() const {
             return m_model->get_contents().substr(m_offset, m_length);
+        }
+
+        LineIt end() const {
+            return {m_model, m_model->get_contents().size(), 0};
         }
 
         struct Cursed {
@@ -167,6 +173,10 @@ class Model {
             LineIt to_return = *this;
             --(*this);
             return to_return;
+        }
+
+        size_t line_end_offset() const {
+            return m_offset + m_length;
         }
     };
     LineIt get_nth_line(size_t line_idx) const {

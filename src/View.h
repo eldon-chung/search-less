@@ -23,6 +23,102 @@ class View {
           m_command_window_ptr(command_window_ptr) {
     }
 
+    struct DisplayableLineIt {
+        using difference_type = size_t;
+        using value_type = std::string_view;
+        using pointer = void;
+        using reference = std::string_view;
+        using iterator_category = std::bidirectional_iterator_tag;
+
+        Model::LineIt m_line_it;
+        size_t m_screen_width;
+        size_t m_line_offset;   // starting position in m_line_it
+        size_t m_global_offset; // byte position of start of line in m_contents
+                                // of model
+                                // TODO: make it an iterator haha
+        size_t m_length;
+
+        bool operator==(const DisplayableLineIt &other) const {
+            return (m_screen_width == other.m_screen_width) &&
+                   (m_line_offset == other.m_line_offset) &&
+                   (m_global_offset == other.m_global_offset) &&
+                   (m_length == other.m_length);
+        }
+
+        std::string_view operator*() const {
+            return m_line_it->substr(m_line_offset, m_screen_width);
+        }
+
+        struct Cursed {
+            std::string_view tmp;
+            std::string_view *operator->() {
+                return &tmp;
+            }
+        };
+        Cursed operator->() const {
+            return {**this};
+        }
+
+        DisplayableLineIt &operator++() {
+            if (m_line_offset + m_screen_width < m_line_it->length()) {
+                m_line_offset += m_screen_width;
+                m_global_offset += m_screen_width;
+                m_length = m_screen_width;
+            } else {
+                // I might be off by 1
+                m_global_offset += (m_line_it->length() - m_line_offset);
+                ++m_line_it;
+                m_line_offset += 0;
+                m_length = std::min(m_line_it->length(), m_screen_width);
+            }
+
+            return *this;
+        }
+
+        DisplayableLineIt operator++(int) {
+            DisplayableLineIt to_return = *this;
+            ++(*this);
+            return to_return;
+        }
+
+        DisplayableLineIt &operator--() {
+            if (m_line_offset >= m_screen_width) {
+                m_line_offset -= m_screen_width;
+                m_global_offset -= m_screen_width;
+                m_length = m_screen_width;
+            } else {
+                // if not you need to move back by 1 line and start figuring
+                // out what the correct truncation is. but how do you do this
+                // without repeating chars?
+                --m_line_it;
+                assert(m_line_it->length() >= 1);
+                size_t num_skips = (m_line_it->length() - 1) / m_screen_width;
+                m_line_offset = num_skips * m_screen_width;
+                // do we actually ever need this? perhaps for something else
+                m_global_offset =
+                    (m_global_offset - m_line_it->length() + m_line_offset);
+
+                if (m_line_it->length() % m_screen_width == 0) {
+                    m_length = m_screen_width;
+                } else {
+                    m_length = m_line_it->length() % m_screen_width;
+                }
+            }
+            return *this;
+        }
+
+        DisplayableLineIt operator--(int) {
+            DisplayableLineIt to_return = *this;
+            --(*this);
+            return to_return;
+        }
+
+        DisplayableLineIt end() const {
+            return {m_line_it.end(), m_screen_width, 0,
+                    m_line_it.end().line_end_offset(), 0};
+        }
+    };
+
   public:
     View(View const &) = delete;
     View &operator=(View const &) = delete;
@@ -80,7 +176,21 @@ class View {
     };
 
     void display_page_at(Model::LineIt line, const std::vector<Highlights> &) {
-        mvwaddnstr(m_main_window_ptr, 0, 0, line->data(), line->length());
+        int height, width;
+        getmaxyx(stdscr, height, width);
+
+        DisplayableLineIt displayable_line_it{
+            line, (size_t)width, 0, 0, std::min(line->length(), (size_t)width)};
+        for (int display_row = 0; display_row < height; display_row++) {
+            if (displayable_line_it != displayable_line_it.end()) {
+                mvwaddnstr(m_main_window_ptr, display_row, 0,
+                           displayable_line_it->data(),
+                           displayable_line_it->length());
+                ++displayable_line_it;
+            } else {
+                mvwaddnstr(m_main_window_ptr, display_row, 0, "~", 1);
+            }
+        }
         wrefresh(m_main_window_ptr);
     }
     void display_command(std::string_view command) {
