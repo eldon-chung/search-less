@@ -75,6 +75,14 @@ class View {
         wrefresh(m_command_window_ptr);
     }
 
+    void display_page_at(const Model &, Model::LineIt,
+                         const std::vector<Highlights> &) {
+    }
+    void display_command(std::string_view) {
+    }
+    void display_status(std::string_view) {
+    }
+
     // void update_state() {
     //     m_text_widget.update_state();
     // }

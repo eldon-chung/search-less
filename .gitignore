@@ -30,6 +30,8 @@
 *.exe
 *.out
 *.app
-build/src/main.json
+build
 
+.cache
+compile_commands.json
 .vscode/*

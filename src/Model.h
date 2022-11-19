@@ -15,6 +15,8 @@
 #include <sys/unistd.h>
 
 class Model {
+    // A model is a collection of lines, and possibly known or unknown line
+    // numbers, computed lazily / asynchronously
     std::filesystem::directory_entry m_de;
     std::string_view m_contents;
     std::vector<size_t> m_line_offsets;
@@ -86,7 +88,12 @@ class Model {
     size_t num_lines() const {
         return m_line_offsets.size();
     }
-    std::string get_line_at(size_t line_idx) const {
+    struct LineIt {
+        const Model *model;
+        size_t offset; // byte position of start of line
+                       // TODO: make it an iterator haha
+    };
+    LineIt get_nth_line(size_t line_idx) const {
         // get the left and right bounds
         size_t left_bound = 0;
         size_t right_bound = 0;
@@ -101,4 +108,14 @@ class Model {
         return std::string{m_contents.begin() + left_bound,
                            m_contents.begin() + right_bound};
     }
+    LineIt get_line_at_offset(size_t offset) const {
+    }
+
+    std::string_view get_contents() const {
+    }
+
+    void read_to_eof() {
+    }
+
+    void update_line_offsets(const std::vector<size_t> &offsets)
 };
