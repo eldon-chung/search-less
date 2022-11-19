@@ -27,7 +27,6 @@ int main(int argc, char **argv) {
 
     Model model = Model::initialize(std::move(read_file));
     View view = View::initialize();
-    int num_pressed = 0;
 
     Model::LineIt cursor = model.get_line_at_byte_offset(0);
     view.display_page_at(cursor, {});
@@ -41,11 +40,17 @@ int main(int argc, char **argv) {
         case 'q':
             break;
         case 'j':
-            ++cursor;
+        case KEY_DOWN:
+            if (cursor != model.get_last_line()) {
+                ++cursor;
+            }
             view.display_page_at(cursor, {});
             break;
         case 'k':
-            --cursor;
+        case KEY_UP:
+            if (cursor != model.get_nth_line(0)) {
+                --cursor;
+            }
             view.display_page_at(cursor, {});
             break;
         case 'g':
@@ -61,14 +66,6 @@ int main(int argc, char **argv) {
         if (ch == 'q') {
             break;
         }
-        if (num_pressed % 2) {
-            view.print_to_main((char)ch);
-            view.render_main();
-        } else {
-            view.print_to_command_window((char)ch);
-            view.render_sub();
-        }
-        num_pressed += 1;
     }
 
     return 0;

@@ -152,20 +152,22 @@ class Model {
         }
 
         LineIt &operator--() {
-
-            throw std::runtime_error("Tried to go behind first line.\n");
+            if (m_offset == 0) {
+                throw std::runtime_error("Tried to go behind first line.\n");
+            }
 
             std::string_view front_contents =
                 m_model->get_contents().substr(0, m_offset - 1);
             size_t prev_offset = front_contents.find_last_of("\n");
             if (prev_offset == std::string::npos) {
-                prev_offset = front_contents.length();
+                prev_offset = 0;
             } else {
                 prev_offset++;
             }
 
             m_offset = prev_offset;
-            m_length = front_contents.length() - m_offset + 1;
+            m_length = front_contents.length() - prev_offset + 1;
+
             return *this;
         }
 
@@ -195,6 +197,11 @@ class Model {
         }
 
         return to_return;
+    }
+
+    LineIt get_last_line() const {
+        // get the left and right bounds
+        return get_line_at_byte_offset(m_contents.size() - 1);
     }
 
     LineIt get_line_at_byte_offset(size_t byte_offset) const {

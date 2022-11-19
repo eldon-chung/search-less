@@ -181,7 +181,7 @@ class View {
 
         DisplayableLineIt displayable_line_it{
             line, (size_t)width, 0, 0, std::min(line->length(), (size_t)width)};
-        for (int display_row = 0; display_row < height; display_row++) {
+        for (int display_row = 0; display_row < height - 1; display_row++) {
             if (displayable_line_it != displayable_line_it.end()) {
                 mvwaddnstr(m_main_window_ptr, display_row, 0,
                            displayable_line_it->data(),
