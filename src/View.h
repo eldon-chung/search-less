@@ -85,7 +85,7 @@ class View {
                 // I might be off by 1
                 m_global_offset += (m_line_it->length() - m_line_offset);
                 ++m_line_it;
-                m_line_offset += 0;
+                m_line_offset = 0;
                 m_length = std::min(m_line_it->length(), m_screen_width);
             }
 
@@ -205,7 +205,7 @@ class View {
         int height, width;
         getmaxyx(m_main_window_ptr, height, width);
 
-        /* werase(m_main_window_ptr); */
+        werase(m_main_window_ptr);
 
         DisplayableLineIt displayable_line_it{line, (size_t)width};
         for (int display_row = 0; display_row < height; display_row++) {
