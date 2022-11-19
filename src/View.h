@@ -18,8 +18,7 @@ class View {
     WINDOW *m_command_window_ptr;
 
   private:
-    View(Model const *model, WINDOW *main_window_ptr,
-         WINDOW *command_window_ptr)
+    View(WINDOW *main_window_ptr, WINDOW *command_window_ptr)
         : m_main_window_ptr(main_window_ptr),
           m_command_window_ptr(command_window_ptr) {
     }
@@ -34,7 +33,7 @@ class View {
         endwin(); // here's how you finish up ncurses mode
     }
 
-    static View initialize(Model *model) {
+    static View initialize() {
         initscr();
         start_color();
         use_default_colors();
@@ -53,7 +52,7 @@ class View {
             fprintf(stderr, "View: could not create new window!\n");
             exit(1);
         }
-        return View(model, stdscr, command_window_ptr);
+        return View(stdscr, command_window_ptr);
     }
 
     // just some toy thing

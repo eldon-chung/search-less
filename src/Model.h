@@ -227,6 +227,10 @@ class Model {
         return size_diff;
     }
 
+    size_t length() const {
+        return m_contents.length();
+    };
+
     void update_line_offsets(const std::vector<size_t> &offsets) {
         for (size_t offset : offsets) {
             m_line_offsets.push_back(offset);

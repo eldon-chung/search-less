@@ -26,15 +26,38 @@ int main(int argc, char **argv) {
     }
 
     Model model = Model::initialize(std::move(read_file));
-    View view = View::initialize(&model);
+    View view = View::initialize();
     int num_pressed = 0;
 
-    wprintw(stdscr, "hello world! press any key to quit.");
+    Model::LineIt cursor = model.get_line_at_byte_offset(0);
+    view.display_page_at(model, cursor, {});
+    view.display_status("Hello, this is a status");
 
     // wait for some input
     while (true) {
         int ch = getch();
         // the quit key
+        switch (ch) {
+        case 'q':
+            break;
+        case 'j':
+            ++cursor;
+            view.display_page_at(model, cursor, {});
+            break;
+        case 'k':
+            --cursor;
+            view.display_page_at(model, cursor, {});
+            break;
+        case 'g':
+            cursor = model.get_line_at_byte_offset(0);
+            view.display_page_at(model, cursor, {});
+            break;
+        case 'G':
+            model.read_to_eof();
+            cursor = model.get_line_at_byte_offset(model.length());
+            view.display_page_at(model, cursor, {});
+            break;
+        }
         if (ch == 'q') {
             break;
         }
