@@ -42,7 +42,7 @@ class Model {
 
         // stat the file
         struct stat statbuf;
-        stat(de.path().c_str(), &statbuf);
+        fstat(fd, &statbuf);
 
         // note: we might want MAP_SHARED with somethimg about msync
         char *contents_ptr = (char *)mmap(NULL, (size_t)statbuf.st_size,
