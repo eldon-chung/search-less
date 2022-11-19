@@ -1,6 +1,7 @@
 #include <filesystem>
 #include <mutex>
 #include <ncurses.h>
+#include <signal.h>
 #include <stdio.h>
 
 #include "Input.h"
@@ -8,7 +9,16 @@
 #include "View.h"
 #include "search.h"
 
+Channel<Command> *sigwinch_channel;
+void handle_sigwinch(int) {
+    sigwinch_channel->push_signal(Command{Command::INVALID, "Hi"});
+}
+
 int main(int argc, char **argv) {
+    Channel<Command> chan;
+    sigwinch_channel = &chan;
+    signal(SIGWINCH, handle_sigwinch);
+
     if (argc < 2) {
         fprintf(stderr, "missing filename.\n");
         exit(1);
@@ -38,7 +48,6 @@ int main(int argc, char **argv) {
     view.display_page_at(cursor, {});
     view.display_status("Hello, this is a status");
 
-    Channel<Command> chan;
     InputThread input(&nc_mutex, &chan);
 
     while (true) {
