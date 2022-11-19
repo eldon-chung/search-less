@@ -235,11 +235,24 @@ class View {
 
         werase(m_main_window_ptr);
 
+        auto strip_r = [](std::string_view str) -> std::string {
+            std::string display_string(str);
+            if (display_string.back() == '\n') {
+                display_string.pop_back();
+            }
+
+            if (display_string.back() == '\r') {
+                display_string.pop_back();
+            }
+
+            return display_string;
+        };
+
         for (int display_row = 0; display_row < height; display_row++) {
             if (displayable_line_it != end()) {
+                std::string display_string = strip_r(*displayable_line_it);
                 mvwaddnstr(m_main_window_ptr, display_row, 0,
-                           displayable_line_it->data(),
-                           displayable_line_it->length());
+                           display_string.c_str(), display_string.length());
                 ++displayable_line_it;
             } else {
                 mvwaddnstr(m_main_window_ptr, display_row, 0, "~", 1);

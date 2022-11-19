@@ -29,10 +29,13 @@ size_t basic_search_first(std::string_view file_contents,
                           std::string_view pattern, size_t beginning_offset,
                           size_t ending_offset) {
 
-    auto it =
-        std::search(file_contents.begin() + beginning_offset,
-                    file_contents.begin() + ending_offset,
-                    std::boyer_moore_searcher(pattern.begin(), pattern.end()));
+    // auto it =
+    //     std::search(file_contents.begin() + beginning_offset,
+    //                 file_contents.begin() + ending_offset,
+    //                 std::boyer_moore_searcher(pattern.begin(),
+    //                 pattern.end()));
 
-    return (size_t)(it - file_contents.begin());
+    // return (size_t)(it - file_contents.begin());
+
+    return file_contents.find(pattern);
 }

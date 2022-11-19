@@ -25,8 +25,8 @@ struct InputThread {
     }
 
     void start(std::mutex *nc_mutex, Channel<Command> *chan) {
-        // We'll use this fd to poll for input, but not actually read from it
-        // ever.
+        // We'll use this fd to poll for input, but not actually read from
+        // it ever.
         struct pollfd fds[1];
         fds[0].fd = open("/dev/tty", O_RDONLY);
         fds[0].events = POLLIN;
@@ -61,11 +61,13 @@ struct InputThread {
                 break;
             case '/':
                 command.type = Command::SEARCH;
-                command.payload = "begin";
+                command.payload =
+                    "Verification succeeded for blk_4258862871822415442";
                 break;
             case 'n':
                 command.type = Command::SEARCH_NEXT;
-                command.payload = "begin";
+                command.payload =
+                    "Verification succeeded for blk_4258862871822415442";
                 break;
             }
             if (command.type == Command::INVALID) {

@@ -22,14 +22,13 @@ class Model {
     // numbers, computed lazily / asynchronously
     std::filesystem::directory_entry m_de;
     std::string_view m_contents;
-    std::vector<size_t> m_line_offsets;
+    // std::vector<size_t> m_line_offsets;
     // should we be using string view?
     int m_fd;
 
     Model(std::filesystem::directory_entry de, std::string_view contents,
-          std::vector<size_t> line_lengths, int fd)
-        : m_de(std::move(de)), m_contents(std::move(contents)),
-          m_line_offsets(std::move(line_lengths)), m_fd(fd) {
+          int fd)
+        : m_de(std::move(de)), m_contents(std::move(contents)), m_fd(fd) {
     }
 
   public:
@@ -55,31 +54,31 @@ class Model {
 
         std::string_view contents{contents_ptr, (size_t)statbuf.st_size};
 
-        std::vector<size_t> line_lengths;
-        std::string_view remaining_contents = contents;
-        while (!remaining_contents.empty()) {
-            size_t first_idx = remaining_contents.find_first_of("\n");
-            if (first_idx == std::string::npos) {
-                // if no more newlines, we know the remaining contents is the
-                // last line length
-                line_lengths.push_back(remaining_contents.size());
-                break;
-            }
+        // std::vector<size_t> line_lengths;
+        // std::string_view remaining_contents = contents;
+        // while (!remaining_contents.empty()) {
+        //     size_t first_idx = remaining_contents.find_first_of("\n");
+        //     if (first_idx == std::string::npos) {
+        //         // if no more newlines, we know the remaining contents is the
+        //         // last line length
+        //         line_lengths.push_back(remaining_contents.size());
+        //         break;
+        //     }
 
-            // line is of length first_idx + 1 (we need to include the newline
-            // itself)
-            line_lengths.push_back(first_idx + 1);
-            // remove the prefix along with the newline
-            remaining_contents.remove_prefix(first_idx + 1);
-        }
+        //     // line is of length first_idx + 1 (we need to include the
+        //     newline
+        //     // itself)
+        //     line_lengths.push_back(first_idx + 1);
+        //     // remove the prefix along with the newline
+        //     remaining_contents.remove_prefix(first_idx + 1);
+        // }
 
         // we need to make the array cumulative instead
-        for (size_t idx = 1; idx < line_lengths.size(); idx++) {
-            line_lengths[idx] += line_lengths[idx - 1];
-        }
+        // for (size_t idx = 1; idx < line_lengths.size(); idx++) {
+        //     line_lengths[idx] += line_lengths[idx - 1];
+        // }
 
-        return Model(std::move(de), std::move(contents),
-                     std::move(line_lengths), fd);
+        return Model(std::move(de), std::move(contents), fd);
     }
     Model(Model const &) = delete;
     Model &operator=(Model const &) = delete;
@@ -89,9 +88,9 @@ class Model {
         munmap((void *)m_contents.data(), m_contents.size());
     }
 
-    size_t num_lines() const {
-        return m_line_offsets.size();
-    }
+    // size_t num_lines() const {
+    //     return m_line_offsets.size();
+    // }
     struct LineIt {
         using difference_type = size_t;
         using value_type = std::string_view;
@@ -262,9 +261,9 @@ class Model {
         return m_contents.length();
     };
 
-    void update_line_offsets(const std::vector<size_t> &offsets) {
-        for (size_t offset : offsets) {
-            m_line_offsets.push_back(offset);
-        }
-    }
+    // void update_line_offsets(const std::vector<size_t> &offsets) {
+    //     for (size_t offset : offsets) {
+    //         m_line_offsets.push_back(offset);
+    //     }
+    // }
 };
