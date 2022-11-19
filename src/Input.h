@@ -63,6 +63,10 @@ struct InputThread {
                 command.type = Command::SEARCH;
                 command.payload = "begin";
                 break;
+            case 'n':
+                command.type = Command::SEARCH_NEXT;
+                command.payload = "begin";
+                break;
             }
             if (command.type == Command::INVALID) {
                 command.payload = keyname(ch);

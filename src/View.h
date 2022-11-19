@@ -186,6 +186,19 @@ class View {
         return DisplayableLineIt(line, (size_t)width);
     }
 
+    DisplayableLineIt get_line_at_byte_offset(size_t offset) {
+        DisplayableLineIt it =
+            get_line_at(m_model->get_line_at_byte_offset(offset));
+
+        int height, width;
+        getmaxyx(stdscr, height, width);
+
+        while (it.m_global_offset + (size_t)width < offset) {
+            ++it;
+        }
+        return it;
+    }
+
     // just some toy thing
     void print_to_main(int ch) {
         std::scoped_lock lock(*nc_mutex);

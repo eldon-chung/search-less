@@ -11,6 +11,7 @@ struct Command {
         VIEW_BOF,
         VIEW_EOF,
         SEARCH,
+        SEARCH_NEXT,
     };
     Type type = INVALID;
     std::string payload;

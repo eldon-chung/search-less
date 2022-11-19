@@ -8,7 +8,7 @@ CXXOPT := -O0
 else
 CXXOPT := -O3
 endif
-CXXWARNINGS := -Wall -Wextra -pedantic
+CXXWARNINGS := -Wall -Wextra -pedantic -Wimplicit-fallthrough
 CXXWERROR := -Werror
 CXXWERROR += -Wno-error=unused-parameter
 CXXWERROR += -Wno-error=unused-private-field
