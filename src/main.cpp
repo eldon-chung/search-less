@@ -1,7 +1,9 @@
 #include <filesystem>
+#include <mutex>
 #include <ncurses.h>
 #include <stdio.h>
 
+#include "Input.h"
 #include "Model.h"
 #include "View.h"
 
@@ -25,45 +27,48 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+    std::mutex nc_mutex;
+
     Model model = Model::initialize(std::move(read_file));
-    View view = View::initialize();
+    View view = View::initialize(&nc_mutex);
 
     Model::LineIt cursor = model.get_line_at_byte_offset(0);
     view.display_page_at(cursor, {});
     view.display_status("Hello, this is a status");
 
-    // wait for some input
+    Channel<Command> chan;
+    InputThread input(&nc_mutex, &chan);
+
     while (true) {
-        int ch = getch();
-        // the quit key
-        switch (ch) {
-        case 'q':
+        Command command = chan.pop();
+        switch (command.type) {
+        case Command::INVALID:
+            view.display_status("Invalid key pressed: " + command.payload);
+        case Command::QUIT:
             break;
-        case 'j':
-        case KEY_DOWN:
+        case Command::VIEW_DOWN:
             if (cursor != model.get_last_line()) {
                 ++cursor;
             }
             view.display_page_at(cursor, {});
             break;
-        case 'k':
-        case KEY_UP:
+        case Command::VIEW_UP:
             if (cursor != model.get_nth_line(0)) {
                 --cursor;
             }
             view.display_page_at(cursor, {});
             break;
-        case 'g':
+        case Command::VIEW_BOF:
             cursor = model.get_line_at_byte_offset(0);
             view.display_page_at(cursor, {});
             break;
-        case 'G':
+        case Command::VIEW_EOF:
             model.read_to_eof();
             cursor = model.get_line_at_byte_offset(model.length());
             view.display_page_at(cursor, {});
             break;
         }
-        if (ch == 'q') {
+        if (command.type == Command::QUIT) {
             break;
         }
     }

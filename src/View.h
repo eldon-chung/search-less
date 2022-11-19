@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <curses.h>
+#include <mutex>
 #include <ncurses.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,12 +15,14 @@
 //  rendered drives the entire rendering logic
 class View {
     // we need to learn how to winch
+    std::mutex *nc_mutex;
     WINDOW *m_main_window_ptr;
     WINDOW *m_command_window_ptr;
 
   private:
-    View(WINDOW *main_window_ptr, WINDOW *command_window_ptr)
-        : m_main_window_ptr(main_window_ptr),
+    View(std::mutex *nc_mutex, WINDOW *main_window_ptr,
+         WINDOW *command_window_ptr)
+        : nc_mutex(nc_mutex), m_main_window_ptr(main_window_ptr),
           m_command_window_ptr(command_window_ptr) {
     }
 
@@ -139,11 +142,14 @@ class View {
     View(View &&) = delete;
     View &operator=(View &&) = delete;
     ~View() {
+        std::scoped_lock lock(*nc_mutex);
+        delwin(m_main_window_ptr);
         delwin(m_command_window_ptr);
         endwin(); // here's how you finish up ncurses mode
     }
 
-    static View initialize() {
+    static View initialize(std::mutex *nc_mutex) {
+        std::scoped_lock lock(*nc_mutex);
         initscr();
         start_color();
         use_default_colors();
@@ -162,24 +168,29 @@ class View {
             fprintf(stderr, "View: could not create new window!\n");
             exit(1);
         }
-        return View(stdscr, command_window_ptr);
+        wresize(stdscr, height - 1, width);
+        return View(nc_mutex, stdscr, command_window_ptr);
     }
 
     // just some toy thing
     void print_to_main(int ch) {
+        std::scoped_lock lock(*nc_mutex);
         waddch(m_main_window_ptr, (unsigned int)ch);
     }
 
     void print_to_command_window(int ch) {
+        std::scoped_lock lock(*nc_mutex);
         waddch(m_command_window_ptr, (unsigned int)ch);
     }
 
     // Calls render on the relevant view elements
     void render_main() {
+        std::scoped_lock lock(*nc_mutex);
         wrefresh(m_main_window_ptr);
     }
 
     void render_sub() {
+        std::scoped_lock lock(*nc_mutex);
         wrefresh(m_command_window_ptr);
     }
 
@@ -190,11 +201,14 @@ class View {
     };
 
     void display_page_at(Model::LineIt line, const std::vector<Highlights> &) {
+        std::scoped_lock lock(*nc_mutex);
         int height, width;
-        getmaxyx(stdscr, height, width);
+        getmaxyx(m_main_window_ptr, height, width);
+
+        /* werase(m_main_window_ptr); */
 
         DisplayableLineIt displayable_line_it{line, (size_t)width};
-        for (int display_row = 0; display_row < height - 1; display_row++) {
+        for (int display_row = 0; display_row < height; display_row++) {
             if (displayable_line_it != displayable_line_it.end()) {
                 mvwaddnstr(m_main_window_ptr, display_row, 0,
                            displayable_line_it->data(),
@@ -205,13 +219,18 @@ class View {
             }
         }
         wrefresh(m_main_window_ptr);
+        wrefresh(m_command_window_ptr);
     }
     void display_command(std::string_view command) {
+        std::scoped_lock lock(*nc_mutex);
+        werase(m_command_window_ptr);
         mvwaddnstr(m_command_window_ptr, 0, 0, command.data(),
                    command.length());
         wrefresh(m_command_window_ptr);
     }
     void display_status(std::string_view status) {
+        std::scoped_lock lock(*nc_mutex);
+        werase(m_command_window_ptr);
         mvwaddnstr(m_command_window_ptr, 0, 0, status.data(), status.length());
         wattrset(m_command_window_ptr, WA_STANDOUT);
         wrefresh(m_command_window_ptr);
