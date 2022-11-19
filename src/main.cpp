@@ -30,9 +30,10 @@ int main(int argc, char **argv) {
     std::mutex nc_mutex;
 
     Model model = Model::initialize(std::move(read_file));
-    View view = View::initialize(&nc_mutex);
+    View view = View::initialize(&nc_mutex, &model);
 
-    Model::LineIt cursor = model.get_line_at_byte_offset(0);
+    View::DisplayableLineIt cursor =
+        view.get_line_at(model.get_line_at_byte_offset(0));
     view.display_page_at(cursor, {});
     view.display_status("Hello, this is a status");
 
@@ -47,24 +48,31 @@ int main(int argc, char **argv) {
         case Command::QUIT:
             break;
         case Command::VIEW_DOWN:
-            if (cursor != model.get_last_line()) {
-                ++cursor;
+            ++cursor;
+            if (cursor == view.end()) {
+                --cursor;
+            } else {
+                view.display_page_at(cursor, {});
             }
-            view.display_page_at(cursor, {});
             break;
         case Command::VIEW_UP:
-            if (cursor != model.get_nth_line(0)) {
+            if (cursor != view.begin()) {
                 --cursor;
             }
             view.display_page_at(cursor, {});
             break;
         case Command::VIEW_BOF:
-            cursor = model.get_line_at_byte_offset(0);
+            cursor = view.begin();
             view.display_page_at(cursor, {});
             break;
         case Command::VIEW_EOF:
             model.read_to_eof();
-            cursor = model.get_line_at_byte_offset(model.length());
+            if (view.end() != view.begin()) {
+                cursor = view.end();
+                --cursor;
+            } else {
+                cursor = view.begin();
+            }
             view.display_page_at(cursor, {});
             break;
         }

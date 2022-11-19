@@ -19,13 +19,16 @@ class View {
     WINDOW *m_main_window_ptr;
     WINDOW *m_command_window_ptr;
 
+    const Model *m_model;
+
   private:
     View(std::mutex *nc_mutex, WINDOW *main_window_ptr,
-         WINDOW *command_window_ptr)
+         WINDOW *command_window_ptr, const Model *model)
         : nc_mutex(nc_mutex), m_main_window_ptr(main_window_ptr),
-          m_command_window_ptr(command_window_ptr) {
+          m_command_window_ptr(command_window_ptr), m_model(model) {
     }
 
+  public:
     struct DisplayableLineIt {
         using difference_type = size_t;
         using value_type = std::string_view;
@@ -129,14 +132,8 @@ class View {
             --(*this);
             return to_return;
         }
-
-        DisplayableLineIt end() const {
-            return {m_line_it.end(), m_screen_width, 0,
-                    m_line_it.end().line_end_offset(), 0};
-        }
     };
 
-  public:
     View(View const &) = delete;
     View &operator=(View const &) = delete;
     View(View &&) = delete;
@@ -148,7 +145,18 @@ class View {
         endwin(); // here's how you finish up ncurses mode
     }
 
-    static View initialize(std::mutex *nc_mutex) {
+    DisplayableLineIt begin() const {
+        int height, width;
+        getmaxyx(stdscr, height, width);
+        return {m_model->begin(), (size_t)width};
+    }
+    DisplayableLineIt end() const {
+        int height, width;
+        getmaxyx(stdscr, height, width);
+        return {m_model->end(), (size_t)width, 0, m_model->length(), 0};
+    }
+
+    static View initialize(std::mutex *nc_mutex, const Model *model) {
         std::scoped_lock lock(*nc_mutex);
         initscr();
         start_color();
@@ -169,7 +177,13 @@ class View {
             exit(1);
         }
         wresize(stdscr, height - 1, width);
-        return View(nc_mutex, stdscr, command_window_ptr);
+        return View(nc_mutex, stdscr, command_window_ptr, model);
+    }
+
+    DisplayableLineIt get_line_at(Model::LineIt line) {
+        int height, width;
+        getmaxyx(stdscr, height, width);
+        return DisplayableLineIt(line, (size_t)width);
     }
 
     // just some toy thing
@@ -200,16 +214,16 @@ class View {
         size_t len;
     };
 
-    void display_page_at(Model::LineIt line, const std::vector<Highlights> &) {
+    void display_page_at(DisplayableLineIt displayable_line_it,
+                         const std::vector<Highlights> &) {
         std::scoped_lock lock(*nc_mutex);
         int height, width;
         getmaxyx(m_main_window_ptr, height, width);
 
         werase(m_main_window_ptr);
 
-        DisplayableLineIt displayable_line_it{line, (size_t)width};
         for (int display_row = 0; display_row < height; display_row++) {
-            if (displayable_line_it != displayable_line_it.end()) {
+            if (displayable_line_it != end()) {
                 mvwaddnstr(m_main_window_ptr, display_row, 0,
                            displayable_line_it->data(),
                            displayable_line_it->length());

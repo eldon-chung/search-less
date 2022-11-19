@@ -112,10 +112,6 @@ class Model {
             return m_model->get_contents().substr(m_offset, m_length);
         }
 
-        LineIt end() const {
-            return {m_model, m_model->get_contents().size(), 0};
-        }
-
         struct Cursed {
             std::string_view tmp;
             std::string_view *operator->() {
@@ -181,6 +177,14 @@ class Model {
             return m_offset + m_length;
         }
     };
+
+    LineIt begin() const {
+        return get_nth_line(0);
+    }
+    LineIt end() const {
+        return {this, m_contents.size(), 0};
+    }
+
     LineIt get_nth_line(size_t line_idx) const {
         // get the left and right bounds
         size_t first_line_length = m_contents.find_first_of("\n");
