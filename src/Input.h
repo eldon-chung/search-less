@@ -9,14 +9,6 @@
 #include "Channel.h"
 #include "Command.h"
 
-// Forward decl of ncurses internal function, sadly we need this.
-/* SCREEN *_nc_screen_of(WINDOW *); */
-/* int _ifd_of_screen(SCREEN*) { */
-/*   // We don't have access to ncurses internals but if we look at the source
- * code, _ifd is the first member, so we'll just pull it from them... */
-/*   int */
-/* } */
-
 struct InputThread {
     std::thread t;
 
