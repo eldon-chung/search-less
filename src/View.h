@@ -14,14 +14,13 @@
 //  rendered drives the entire rendering logic
 class View {
     // we need to learn how to winch
-    Model const *m_model;
     WINDOW *m_main_window_ptr;
     WINDOW *m_command_window_ptr;
 
   private:
     View(Model const *model, WINDOW *main_window_ptr,
          WINDOW *command_window_ptr)
-        : m_model(model), m_main_window_ptr(main_window_ptr),
+        : m_main_window_ptr(main_window_ptr),
           m_command_window_ptr(command_window_ptr) {
     }
 
@@ -75,12 +74,25 @@ class View {
         wrefresh(m_command_window_ptr);
     }
 
+    struct Highlights {
+        Model::LineIt line;
+        size_t start_col;
+        size_t len;
+    };
+
     void display_page_at(const Model &, Model::LineIt,
                          const std::vector<Highlights> &) {
+        wrefresh(m_main_window_ptr);
     }
-    void display_command(std::string_view) {
+    void display_command(std::string_view command) {
+        mvwaddnstr(m_command_window_ptr, 0, 0, command.data(),
+                   command.length());
+        wrefresh(m_command_window_ptr);
     }
-    void display_status(std::string_view) {
+    void display_status(std::string_view status) {
+        mvwaddnstr(m_command_window_ptr, 0, 0, status.data(), status.length());
+        wattrset(m_command_window_ptr, WA_STANDOUT);
+        wrefresh(m_command_window_ptr);
     }
 
     // void update_state() {

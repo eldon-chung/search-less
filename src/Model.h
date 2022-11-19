@@ -117,5 +117,6 @@ class Model {
     void read_to_eof() {
     }
 
-    void update_line_offsets(const std::vector<size_t> &offsets)
+    void update_line_offsets(const std::vector<size_t> &offsets) {
+    }
 };
