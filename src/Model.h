@@ -110,6 +110,16 @@ class Model {
             return m_model->get_contents().substr(m_offset, m_length);
         }
 
+        struct Cursed {
+            std::string_view tmp;
+            std::string_view *operator->() {
+                return &tmp;
+            }
+        };
+        Cursed operator->() const {
+            return {**this};
+        }
+
         LineIt &operator++() {
             if (m_length == 0) {
                 throw std::runtime_error("tried to go past past last line.\n");

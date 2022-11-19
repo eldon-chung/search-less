@@ -79,8 +79,8 @@ class View {
         size_t len;
     };
 
-    void display_page_at(const Model &, Model::LineIt,
-                         const std::vector<Highlights> &) {
+    void display_page_at(Model::LineIt line, const std::vector<Highlights> &) {
+        mvwaddnstr(m_main_window_ptr, 0, 0, line->data(), line->length());
         wrefresh(m_main_window_ptr);
     }
     void display_command(std::string_view command) {

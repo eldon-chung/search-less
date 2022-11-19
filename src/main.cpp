@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     int num_pressed = 0;
 
     Model::LineIt cursor = model.get_line_at_byte_offset(0);
-    view.display_page_at(model, cursor, {});
+    view.display_page_at(cursor, {});
     view.display_status("Hello, this is a status");
 
     // wait for some input
@@ -42,20 +42,20 @@ int main(int argc, char **argv) {
             break;
         case 'j':
             ++cursor;
-            view.display_page_at(model, cursor, {});
+            view.display_page_at(cursor, {});
             break;
         case 'k':
             --cursor;
-            view.display_page_at(model, cursor, {});
+            view.display_page_at(cursor, {});
             break;
         case 'g':
             cursor = model.get_line_at_byte_offset(0);
-            view.display_page_at(model, cursor, {});
+            view.display_page_at(cursor, {});
             break;
         case 'G':
             model.read_to_eof();
             cursor = model.get_line_at_byte_offset(model.length());
-            view.display_page_at(model, cursor, {});
+            view.display_page_at(cursor, {});
             break;
         }
         if (ch == 'q') {
