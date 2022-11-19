@@ -2,10 +2,13 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <iterator>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include <assert.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
@@ -83,40 +86,150 @@ class Model {
     Model(Model &&) = delete;
     Model &operator=(Model &&) = delete;
     ~Model() {
+        munmap((void *)m_contents.data(), m_contents.size());
     }
 
     size_t num_lines() const {
         return m_line_offsets.size();
     }
     struct LineIt {
-        const Model *model;
-        size_t offset; // byte position of start of line
-                       // TODO: make it an iterator haha
+        using difference_type = size_t;
+        using value_type = std::string_view;
+        using pointer = void;
+        using reference = std::string_view;
+        using iterator_category = std::bidirectional_iterator_tag;
+
+        const Model *m_model;
+        size_t m_offset; // byte position of start of line
+                         // TODO: make it an iterator haha
+        size_t m_length;
+
+        bool operator==(const LineIt &other) const = default;
+
+        std::string_view operator*() const {
+            return m_model->get_contents().substr(m_offset, m_length);
+        }
+
+        LineIt &operator++() {
+            if (m_length == 0) {
+                throw std::runtime_error("tried to go past past last line.\n");
+            }
+
+            std::string_view remaining_contents =
+                m_model->get_contents().substr(m_offset + m_length);
+            size_t next_length = remaining_contents.find_first_of("\n");
+            if (next_length == std::string::npos) {
+                next_length = remaining_contents.length();
+            } else {
+                next_length++;
+            }
+
+            m_offset += m_length;
+            m_length = next_length;
+            return *this;
+        }
+
+        LineIt operator++(int) {
+            LineIt to_return = *this;
+            ++(*this);
+            return to_return;
+        }
+
+        LineIt &operator--() {
+
+            throw std::runtime_error("Tried to go behind first line.\n");
+
+            std::string_view front_contents =
+                m_model->get_contents().substr(0, m_offset - 1);
+            size_t prev_offset = front_contents.find_last_of("\n");
+            if (prev_offset == std::string::npos) {
+                prev_offset = front_contents.length();
+            } else {
+                prev_offset++;
+            }
+
+            m_offset = prev_offset;
+            m_length = front_contents.length() - m_offset + 1;
+            return *this;
+        }
+
+        LineIt operator--(int) {
+            LineIt to_return = *this;
+            --(*this);
+            return to_return;
+        }
     };
     LineIt get_nth_line(size_t line_idx) const {
         // get the left and right bounds
-        size_t left_bound = 0;
-        size_t right_bound = 0;
-
-        if (line_idx == 0) {
-            right_bound = m_line_offsets.at(line_idx) - 1;
+        size_t first_line_length = m_contents.find_first_of("\n");
+        if (first_line_length == std::string::npos) {
+            first_line_length++;
         } else {
-            left_bound = m_line_offsets.at(line_idx - 1);
-            right_bound = m_line_offsets.at(line_idx) - 1;
+            first_line_length = m_contents.length();
         }
 
-        return std::string{m_contents.begin() + left_bound,
-                           m_contents.begin() + right_bound};
+        LineIt to_return{this, 0, first_line_length};
+
+        while (line_idx-- > 0) {
+            to_return++;
+        }
+
+        return to_return;
     }
-    LineIt get_line_at_offset(size_t offset) const {
+
+    LineIt get_line_at_byte_offset(size_t byte_offset) const {
+        if (byte_offset > m_contents.size()) {
+            throw std::runtime_error(
+                "byte_offset is larger than content length.\n");
+        }
+        // do it the slow way first;
+        std::string_view left_half = m_contents.substr(0, byte_offset);
+        std::string_view right_half = m_contents.substr(byte_offset);
+
+        size_t left_pos = left_half.find_last_of("\n");
+        if (left_pos == std::string::npos) {
+            left_pos = 0;
+        } else {
+            left_pos++;
+        }
+
+        size_t right_length = right_half.find_first_of("\n");
+        if (right_length == std::string::npos) {
+            right_length = right_half.length();
+        } else {
+            right_length++;
+        }
+
+        return {this, left_pos, (left_half.length() - left_pos) + right_length};
     }
 
     std::string_view get_contents() const {
+        return m_contents;
     }
 
-    void read_to_eof() {
+    ssize_t read_to_eof() {
+        // stat the file
+        struct stat statbuf;
+        fstat(m_fd, &statbuf);
+
+        ssize_t size_diff =
+            (ssize_t)statbuf.st_size - (ssize_t)m_contents.length();
+        if (size_diff <= 0) {
+            return size_diff;
+        }
+
+        munmap((void *)m_contents.data(), m_contents.size());
+        char *contents_ptr = (char *)mmap(NULL, (size_t)statbuf.st_size,
+                                          PROT_READ, MAP_PRIVATE, m_fd, 0);
+
+        m_contents = std::string_view{contents_ptr, (size_t)statbuf.st_size};
+
+        return size_diff;
     }
 
     void update_line_offsets(const std::vector<size_t> &offsets) {
+        for (size_t offset : offsets) {
+            m_line_offsets.push_back(offset);
+        }
     }
 };
