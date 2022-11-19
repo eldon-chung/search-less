@@ -10,6 +10,7 @@ struct Command {
         VIEW_UP,
         VIEW_BOF,
         VIEW_EOF,
+        SEARCH,
     };
     Type type = INVALID;
     std::string payload;

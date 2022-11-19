@@ -59,6 +59,10 @@ struct InputThread {
             case 'G':
                 command.type = Command::VIEW_EOF;
                 break;
+            case '/':
+                command.type = Command::SEARCH;
+                command.payload = "begin";
+                break;
             }
             if (command.type == Command::INVALID) {
                 command.payload = keyname(ch);
