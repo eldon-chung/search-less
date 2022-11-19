@@ -38,6 +38,20 @@ class View {
                                 // TODO: make it an iterator haha
         size_t m_length;
 
+        DisplayableLineIt(Model::LineIt line_it, size_t screen_width,
+                          size_t m_line_offset, size_t global_offset,
+                          size_t m_length)
+            : m_line_it(std::move(line_it)), m_screen_width(screen_width),
+              m_line_offset(m_line_offset), m_global_offset(global_offset),
+              m_length(m_length) {
+        }
+
+        DisplayableLineIt(Model::LineIt line_it, size_t screen_width)
+            : m_line_it(std::move(line_it)), m_screen_width(screen_width),
+              m_line_offset(0), m_global_offset(m_line_it.m_offset),
+              m_length(std::min(m_screen_width, m_line_it->length())) {
+        }
+
         bool operator==(const DisplayableLineIt &other) const {
             return (m_screen_width == other.m_screen_width) &&
                    (m_line_offset == other.m_line_offset) &&
@@ -179,8 +193,7 @@ class View {
         int height, width;
         getmaxyx(stdscr, height, width);
 
-        DisplayableLineIt displayable_line_it{
-            line, (size_t)width, 0, 0, std::min(line->length(), (size_t)width)};
+        DisplayableLineIt displayable_line_it{line, (size_t)width};
         for (int display_row = 0; display_row < height - 1; display_row++) {
             if (displayable_line_it != displayable_line_it.end()) {
                 mvwaddnstr(m_main_window_ptr, display_row, 0,
