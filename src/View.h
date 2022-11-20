@@ -85,11 +85,12 @@ class View {
         }
 
         DisplayableLineIt &operator--() {
+            // to tell if you've rewinched we should also check if
             if (relative_line_offset() >= m_screen_width) {
                 fprintf(stderr, "staying on same model line; relative %zu\n",
                         relative_line_offset());
                 m_global_offset -= m_screen_width;
-            } else {
+            } else if (relative_line_offset() == 0) {
                 // if not you need to move back by 1 line and start figuring
                 // out what the correct truncation is. but how do you do this
                 // without repeating chars?
@@ -100,6 +101,8 @@ class View {
 
                 m_global_offset =
                     (m_global_offset - m_line_it->length() + new_offset);
+            } else {
+                m_global_offset = m_line_it.m_offset;
             }
             return *this;
         }
@@ -333,6 +336,9 @@ class View {
 
         wclear(m_main_window_ptr);
         wclear(m_command_window_ptr);
+
+        // update cursor
+        m_cursor.m_screen_width = (size_t)COLS;
     }
 
     // void update_state() {
