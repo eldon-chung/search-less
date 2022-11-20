@@ -368,6 +368,11 @@ class View {
         wrefresh(m_main_window_ptr);
     }
 
+    // void clear_main_highlights() {
+    //     wstandend(m_main_window_ptr);
+    //     wrefresh(m_main_window_ptr);
+    // }
+
     void display_command(std::string_view command) {
         std::scoped_lock lock(*nc_mutex);
         werase(m_command_window_ptr);

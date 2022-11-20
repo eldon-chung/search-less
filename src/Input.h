@@ -139,7 +139,7 @@ struct InputThread {
                 }
                 break;
             }
-            case 'n':
+            case 'n': // this needs to work with search history eventually;
                 chan->push({Command::SEARCH_NEXT, ""});
                 break;
             case '-': {
