@@ -133,12 +133,80 @@ int main(int argc, char **argv) {
             view.display_command(command_str_buffer);
             break;
         }
+        case Command::SEARCH_PREV: { // assume for now that search_exec was
+                                     // definitely called
+
+            command_str_buffer = command.payload;
+            fprintf(stderr, "search-prev executing on [%s]\n",
+                    command_str_buffer.c_str());
+
+            if (view.begin() == view.end()) {
+                break;
+            }
+
+            std::string_view contents = model.get_contents();
+            std::string search_pattern{command_str_buffer.begin() + 1,
+                                       command_str_buffer.end()};
+            size_t left_bound = 0;
+            size_t right_bound = view.get_starting_offset();
+            size_t curr_line_end = view.cursor().get_ending_offset();
+
+            fprintf(stderr,
+                    "left_bound %zu, right_bound %zu, curr_line_end %zu\n",
+                    left_bound, right_bound, curr_line_end);
+
+            // if it doesnt exist on the current line, don't
+            // it means it doesnt exist.
+            size_t first_match = basic_search_first(
+                contents, search_pattern, right_bound, curr_line_end,
+                caseless_mode != CaselessSearchMode::SENSITIVE);
+
+            // fprintf(stderr, "first_match %zu\n", first_match);
+            // if (first_match == curr_line_end ||
+            //     first_match == std::string::npos) {
+            //     // this needs to change depending on whether there was
+            //     // already a search being done
+            //     view.display_status("Pattern not found");
+            //     break;
+            // }
+
+            // dont bother scrolling up if we know what offset to start
+            // from view.scroll_down();
+            size_t last_match = basic_search_last(
+                contents, search_pattern, left_bound, right_bound,
+                caseless_mode != CaselessSearchMode::SENSITIVE);
+            // fprintf(stderr, "last_match %zu\n", last_match);
+
+            if (last_match == right_bound && first_match != curr_line_end) {
+                // if there isnt another instance behind us, but there is one
+                // instance on our line
+                view.display_status("(TOP)");
+            } else if (last_match == right_bound) {
+                // there just isnt another instance
+                view.display_status("Pattern not found");
+            } else {
+                view.move_to_byte_offset(last_match);
+                auto result_offsets = basic_search_all(
+                    model.get_contents(), search_pattern,
+                    view.get_starting_offset(), view.get_ending_offset());
+                std::vector<View::Highlights> highlight_list;
+                highlight_list.reserve(result_offsets.size());
+                for (size_t offset : result_offsets) {
+                    highlight_list.push_back({offset, search_pattern.length()});
+                    // fprintf(stderr, "global offset %zu\n", offset);
+                }
+                view.display_page_at(highlight_list);
+                command_str_buffer = ":";
+                view.display_command(":");
+            }
+            break;
+        }
         case Command::SEARCH_NEXT: { // assume for now that search_exec was
                                      // definitely called
 
             command_str_buffer = command.payload;
-            fprintf(stderr, "search-next executing on [%s]\n",
-                    command_str_buffer.c_str());
+            // fprintf(stderr, "search-next executing on [%s]\n",
+            // command_str_buffer.c_str());
 
             if (view.begin() == view.end()) {
                 break;
@@ -182,7 +250,7 @@ int main(int argc, char **argv) {
                 highlight_list.reserve(result_offsets.size());
                 for (size_t offset : result_offsets) {
                     highlight_list.push_back({offset, search_pattern.length()});
-                    fprintf(stderr, "global offset %zu\n", offset);
+                    // fprintf(stderr, "global offset %zu\n", offset);
                 }
                 view.display_page_at(highlight_list);
                 command_str_buffer = ":";
@@ -191,8 +259,8 @@ int main(int argc, char **argv) {
             break;
         }
         case Command::SEARCH_EXEC: {
-            fprintf(stderr, "search executing on [%s]\n",
-                    command_str_buffer.c_str());
+            // fprintf(stderr, "search executing on [%s]\n",
+            // command_str_buffer.c_str());
 
             if (view.begin() == view.end()) {
                 break;
@@ -210,8 +278,8 @@ int main(int argc, char **argv) {
 
             if (first_match == model.length() ||
                 first_match == std::string::npos) {
-                // this needs to change depending on whether there was already a
-                // search being done
+                // this needs to change depending on whether there was
+                // already a search being done
                 view.display_status("Pattern not found");
                 view.display_page_at({});
                 break;
@@ -234,8 +302,8 @@ int main(int argc, char **argv) {
         }
         case Command::BUFFER_CURS_POS: {
             command_cursor_pos = from_payload(command.payload);
-            fprintf(stderr, "printing command buffer: %s\n",
-                    command_str_buffer.c_str());
+            // fprintf(stderr, "printing command buffer: %s\n",
+            //         command_str_buffer.c_str());
             view.display_command(command_str_buffer, command_cursor_pos);
             break;
         }

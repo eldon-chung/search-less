@@ -145,6 +145,9 @@ struct InputThread {
             case 'n': // this needs to work with search history eventually;
                 chan->push({Command::SEARCH_NEXT, pattern_buf});
                 break;
+            case 'N': // this needs to work with search history eventually;
+                chan->push({Command::SEARCH_PREV, pattern_buf});
+                break;
             case '-': {
                 chan->push({Command::DISPLAY_COMMAND, "Set option: -"});
                 // Set option

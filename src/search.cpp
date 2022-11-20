@@ -101,11 +101,19 @@ size_t basic_search_first(std::string_view file_contents,
 size_t basic_search_last(std::string_view file_contents,
                          std::string_view pattern, size_t beginning_offset,
                          size_t ending_offset, bool caseless /* = false */) {
+    // fprintf(stderr, "left byte offset %zu\n", beginning_offset);
+    // fprintf(stderr, "right byte offset %zu\n", ending_offset);
+    // fprintf(stderr, "content length %zu\n", file_contents.length());
 
     size_t result = file_contents.rfind(pattern, ending_offset - 1);
-    if (result == std::string::npos || result < beginning_offset) {
+    if (result == std::string::npos || result < beginning_offset ||
+        result >= ending_offset) {
+        // fprintf(stderr, "not found setting ending_offset %zu\n",
+        // ending_offset);
         result = ending_offset;
     }
+
+    // fprintf(stderr, "returning result %zu\n", result);
 
     return result;
 }

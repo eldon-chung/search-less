@@ -14,6 +14,7 @@ struct Command {
         SEARCH_QUIT,
         SEARCH_EXEC,
         SEARCH_NEXT,
+        SEARCH_PREV,
         RESIZE,
         DISPLAY_COMMAND,
         TOGGLE_CASELESS,
