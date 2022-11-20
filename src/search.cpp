@@ -37,5 +37,22 @@ size_t basic_search_first(std::string_view file_contents,
 
     // return (size_t)(it - file_contents.begin());
 
-    return file_contents.find(pattern);
+    size_t result = file_contents.find(pattern, beginning_offset);
+    if (result == std::string::npos || result >= ending_offset) {
+        result = ending_offset;
+    }
+
+    return result;
+}
+
+size_t basic_search_last(std::string_view file_contents,
+                         std::string_view pattern, size_t beginning_offset,
+                         size_t ending_offset) {
+
+    size_t result = file_contents.rfind(pattern, ending_offset - 1);
+    if (result == std::string::npos || result < beginning_offset) {
+        result = ending_offset;
+    }
+
+    return result;
 }
