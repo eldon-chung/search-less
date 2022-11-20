@@ -129,7 +129,9 @@ int main(int argc, char **argv) {
                 caseless_mode != CaselessSearchMode::SENSITIVE);
             if (first_match == model.length() ||
                 first_match == std::string::npos) {
-                view.move_to_end();
+                // view.move_to_end();
+                view.display_status("Pattern not found");
+                break;
             } else {
                 view.move_to_byte_offset(first_match);
                 auto result_offsets = basic_search_all(

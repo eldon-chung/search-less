@@ -58,7 +58,7 @@ struct InputThread {
                 chan->push({Command::VIEW_EOF});
                 break;
             case '/':
-                chan->push({Command::SEARCH, "break"});
+                chan->push({Command::SEARCH, "gigachad"});
                 break;
             case 'n':
                 chan->push({Command::SEARCH_NEXT, "break"});
