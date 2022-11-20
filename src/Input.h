@@ -11,10 +11,15 @@
 #include "Command.h"
 
 struct InputThread {
+    std::mutex *nc_mutex;
+    Channel<Command> *chan;
     std::thread t;
+    struct pollfd pollfds[1];
 
     InputThread(std::mutex *nc_mutex, Channel<Command> *chan)
-        : t(&InputThread::start, this, nc_mutex, chan) {
+        : nc_mutex(nc_mutex), chan(chan), t(&InputThread::start, this) {
+        pollfds[0].fd = open("/dev/tty", O_RDONLY);
+        pollfds[0].events = POLLIN;
     }
 
     InputThread(const InputThread &) = delete;
@@ -25,58 +30,64 @@ struct InputThread {
         t.join();
     }
 
-    void start(std::mutex *nc_mutex, Channel<Command> *chan) {
-        // We'll use this fd to poll for input, but not actually read from
-        // it ever.
-        struct pollfd fds[1];
-        fds[0].fd = open("/dev/tty", O_RDONLY);
-        fds[0].events = POLLIN;
+    int poll_and_getch() {
+        poll(pollfds, 1, -1);
+        std::scoped_lock lock(*nc_mutex);
+        return getch();
+    }
 
+    void start() {
         while (true) {
-            poll(fds, 1, -1);
-
-            int ch;
-            {
-                std::scoped_lock lock(*nc_mutex);
-                ch = getch();
-            }
-
-            Command command;
+            int ch = poll_and_getch();
             switch (ch) {
             case 'q':
-                command.type = Command::QUIT;
-                break;
+                chan->push({Command::QUIT});
+                return; // Kill input thread
             case 'j':
             case KEY_DOWN:
-                command.type = Command::VIEW_DOWN;
+                chan->push({Command::VIEW_DOWN});
                 break;
             case 'k':
             case KEY_UP:
-                command.type = Command::VIEW_UP;
+                chan->push({Command::VIEW_UP});
                 break;
             case 'g':
-                command.type = Command::VIEW_BOF;
+                chan->push({Command::VIEW_BOF});
                 break;
             case 'G':
-                command.type = Command::VIEW_EOF;
+                chan->push({Command::VIEW_EOF});
                 break;
             case '/':
-                command.type = Command::SEARCH;
-                command.payload =
-                    "Verification succeeded for blk_4258862871822415442";
+                chan->push(
+                    {Command::SEARCH,
+                     "Verification succeeded for blk_4258862871822415442"});
                 break;
             case 'n':
-                command.type = Command::SEARCH_NEXT;
-                command.payload =
-                    "Verification succeeded for blk_4258862871822415442";
+                chan->push(
+                    {Command::SEARCH_NEXT,
+                     "Verification succeeded for blk_4258862871822415442"});
+                break;
+            case '-': {
+                chan->push({Command::DISPLAY_COMMAND, "Set option: -"});
+                // Set option
+                int opt = poll_and_getch();
+                switch (opt) {
+                case 'I':
+                    chan->push({Command::TOGGLE_CASELESS, "-I"});
+                    break;
+                case 'i':
+                    chan->push({Command::TOGGLE_CONDITIONALLY_CASELESS, "-i"});
+                    break;
+                default:
+                    using namespace std::string_literals;
+                    chan->push({Command::DISPLAY_COMMAND,
+                                "Unknown option: -"s + keyname(opt)});
+                    break;
+                }
                 break;
             }
-            if (command.type == Command::INVALID) {
-                command.payload = keyname(ch);
-            }
-
-            chan->push(std::move(command));
-            if (command.type == Command::QUIT) {
+            default:
+                chan->push({Command::INVALID, keyname(ch)});
                 break;
             }
         }

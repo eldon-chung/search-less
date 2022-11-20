@@ -13,7 +13,10 @@ struct Command {
         SEARCH,
         SEARCH_NEXT,
         RESIZE,
+        DISPLAY_COMMAND,
+        TOGGLE_CASELESS,
+        TOGGLE_CONDITIONALLY_CASELESS,
     };
     Type type = INVALID;
-    std::string payload;
+    std::string payload = "";
 };

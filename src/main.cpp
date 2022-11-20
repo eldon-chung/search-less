@@ -44,6 +44,13 @@ int main(int argc, char **argv) {
 
     InputThread input(&nc_mutex, &chan);
 
+    enum class CaselessSearchMode {
+        SENSITIVE,
+        CONDITIONALLY_SENSITIVE,
+        INSENSITIVE,
+    };
+    CaselessSearchMode caseless_mode = CaselessSearchMode::SENSITIVE;
+
     while (true) {
         Command command = chan.pop();
         switch (command.type) {
@@ -74,6 +81,36 @@ int main(int argc, char **argv) {
             view.move_to_end();
             view.display_page_at({});
             break;
+        case Command::DISPLAY_COMMAND: {
+            view.display_command(command.payload);
+            break;
+        }
+        case Command::TOGGLE_CASELESS: {
+            if (caseless_mode == CaselessSearchMode::INSENSITIVE) {
+                caseless_mode = CaselessSearchMode::SENSITIVE;
+                view.display_status(command.payload +
+                                    ": Caseless search disabled");
+            } else {
+                caseless_mode = CaselessSearchMode::INSENSITIVE;
+                view.display_status(command.payload +
+                                    ": Caseless search enabled");
+            }
+            break;
+        }
+        case Command::TOGGLE_CONDITIONALLY_CASELESS: {
+            if (caseless_mode == CaselessSearchMode::CONDITIONALLY_SENSITIVE) {
+                caseless_mode = CaselessSearchMode::SENSITIVE;
+                view.display_status(command.payload +
+                                    ": Caseless search disabled");
+            } else {
+                caseless_mode = CaselessSearchMode::CONDITIONALLY_SENSITIVE;
+                view.display_status(
+                    command.payload +
+                    ": Conditionally caseless search enabled (case is "
+                    "ignored if pattern only contains lowercase)");
+            }
+            break;
+        }
         case Command::SEARCH_NEXT: {
             if (view.begin() == view.end()) {
                 break;

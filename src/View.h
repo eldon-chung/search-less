@@ -318,6 +318,7 @@ class View {
     void display_command(std::string_view command) {
         std::scoped_lock lock(*nc_mutex);
         werase(m_command_window_ptr);
+        wattrset(m_command_window_ptr, WA_NORMAL);
         mvwaddnstr(m_command_window_ptr, 0, 0, command.data(),
                    command.length());
         wrefresh(m_command_window_ptr);
