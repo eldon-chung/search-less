@@ -4,6 +4,7 @@
 #include <mutex>
 #include <ncurses.h>
 #include <poll.h>
+#include <signal.h>
 #include <thread>
 
 #include "Channel.h"
@@ -81,3 +82,5 @@ struct InputThread {
         }
     }
 };
+
+void register_for_sigwinch_channel(Channel<Command> *to_register);

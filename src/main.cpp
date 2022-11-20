@@ -9,15 +9,9 @@
 #include "View.h"
 #include "search.h"
 
-Channel<Command> *sigwinch_channel;
-void handle_sigwinch(int) {
-    sigwinch_channel->push_signal(Command{Command::INVALID, "Hi"});
-}
-
 int main(int argc, char **argv) {
     Channel<Command> chan;
-    sigwinch_channel = &chan;
-    signal(SIGWINCH, handle_sigwinch);
+    register_for_sigwinch_channel(&chan);
 
     if (argc < 2) {
         fprintf(stderr, "missing filename.\n");
