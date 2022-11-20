@@ -50,6 +50,11 @@ int main(int argc, char **argv) {
         case Command::INVALID:
             view.display_status("Invalid key pressed: " + command.payload);
             break;
+        case Command::RESIZE:
+            view.handle_resize();
+            view.display_page_at(cursor, {});
+            view.display_status("handle resize called");
+            break;
         case Command::QUIT:
             break;
         case Command::VIEW_DOWN:

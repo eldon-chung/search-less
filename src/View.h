@@ -8,6 +8,9 @@
 #include <stdlib.h>
 #include <utility>
 
+#include <sys/ioctl.h>
+#include <unistd.h>
+
 #include "Model.h"
 
 // Serves as the driver for the entire view. For now let's keep it at a simple
@@ -171,6 +174,9 @@ class View {
         getmaxyx(stdscr, height, width);
         // Construct the view with the main screen, and passing in height and
         // width
+
+        fprintf(stderr, "initialize %d, cols %d\n", height, width);
+
         WINDOW *command_window_ptr = newwin(1, width, height - 1, 0);
         if (command_window_ptr == NULL) {
             fprintf(stderr, "View: could not create new window!\n");
@@ -274,6 +280,25 @@ class View {
         mvwaddnstr(m_command_window_ptr, 0, 0, status.data(), status.length());
         wattrset(m_command_window_ptr, WA_STANDOUT);
         wrefresh(m_command_window_ptr);
+    }
+
+    void handle_resize() {
+
+        endwin();
+        refresh();
+
+        wresize(m_main_window_ptr, LINES - 1, COLS);
+
+        delwin(m_command_window_ptr);
+
+        m_command_window_ptr = newwin(1, COLS, LINES - 1, 0);
+        if (m_command_window_ptr == NULL) {
+            fprintf(stderr, "failed to make new command window\n");
+            exit(1);
+        }
+
+        wclear(m_main_window_ptr);
+        wclear(m_command_window_ptr);
     }
 
     // void update_state() {

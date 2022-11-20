@@ -12,6 +12,7 @@ struct Command {
         VIEW_EOF,
         SEARCH,
         SEARCH_NEXT,
+        RESIZE,
     };
     Type type = INVALID;
     std::string payload;
