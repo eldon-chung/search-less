@@ -10,12 +10,15 @@ struct Command {
         VIEW_UP,
         VIEW_BOF,
         VIEW_EOF,
-        SEARCH,
+        SEARCH_START,
+        SEARCH_QUIT,
+        SEARCH_EXEC,
         SEARCH_NEXT,
         RESIZE,
         DISPLAY_COMMAND,
         TOGGLE_CASELESS,
         TOGGLE_CONDITIONALLY_CASELESS,
+        BUFFER_CURS_POS,
     };
     Type type = INVALID;
     std::string payload = "";

@@ -261,6 +261,10 @@ class Model {
         return m_contents.length();
     };
 
+    std::string relative_path() const {
+        return m_de.path().relative_path().string();
+    }
+
     // void update_line_offsets(const std::vector<size_t> &offsets) {
     //     for (size_t offset : offsets) {
     //         m_line_offsets.push_back(offset);

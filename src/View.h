@@ -96,8 +96,8 @@ class View {
         DisplayableLineIt &operator--() {
             // to tell if you've rewinched we should also check if
             if (relative_line_offset() >= m_screen_width) {
-                fprintf(stderr, "staying on same model line; relative %zu\n",
-                        relative_line_offset());
+                // fprintf(stderr, "staying on same model line; relative %zu\n",
+                //         relative_line_offset());
                 m_global_offset -= m_screen_width;
             } else if (relative_line_offset() == 0) {
                 // if not you need to move back by 1 line and start figuring
@@ -307,26 +307,12 @@ class View {
             [](WINDOW *window_ptr, const DisplayableLineIt &page_lines_it,
                const std::vector<Highlights> &highlight_list,
                size_t starting_idx, int display_row) {
-                // wstandout(window_ptr);
                 size_t starting_col = highlight_list[starting_idx].offset -
                                       page_lines_it.relative_line_offset() -
                                       page_lines_it.get_starting_offset();
                 size_t length = highlight_list[starting_idx].length;
-                fprintf(stderr,
-                        "highlight offset %zu, relative offset  %zu, starting "
-                        "offset %zu = starting_col %d length %zu at row %d\n",
-                        highlight_list[starting_idx].offset,
-                        page_lines_it.relative_line_offset(),
-                        page_lines_it.get_starting_offset(), (int)starting_col,
-                        length, display_row);
-                // fprintf(stderr, "row %d, col %zu, length %zu\n", display_row,
-                //         starting_col, length);
-                // fprintf(stderr, "relative line offset %d,  %zu, length
-                // %zu\n",
-                //         display_row, starting_col, length);
                 mvwchgat(window_ptr, display_row, (int)starting_col,
                          (int)length, WA_STANDOUT, 0, NULL);
-                // wstandend(window_ptr);
             };
 
         std::scoped_lock lock(*nc_mutex);
@@ -335,14 +321,6 @@ class View {
 
         werase(m_main_window_ptr);
         size_t highlight_idx = 0;
-
-        // wstandout(m_main_window_ptr);
-        // if (highlight_list.empty()) {
-        //     wstandend(m_main_window_ptr);
-        // }
-
-        //  int mvwchgat(WINDOW *win, int y, int x, int n, attr_t attr, short
-        //  color, const void *opts)
 
         auto page_lines_it = m_cursor;
         for (int display_row = 0; display_row < height;) {
@@ -370,15 +348,11 @@ class View {
 
         for (int display_row = 0; display_row < height; display_row++) {
             if (page_lines_it != end()) {
-                fprintf(stderr, "current line start end offset %zu, %zu\n",
-                        page_lines_it.get_starting_offset(),
-                        page_lines_it.get_ending_offset());
                 while (highlight_idx < highlight_list.size() &&
                        highlight_list[highlight_idx].offset >=
                            page_lines_it.get_starting_offset() &&
                        highlight_list[highlight_idx].offset <
                            page_lines_it.get_ending_offset()) {
-                    // wstandend(m_main_window_ptr);
 
                     place_attr_on_line(m_main_window_ptr, page_lines_it,
                                        highlight_list, highlight_idx,
@@ -391,9 +365,7 @@ class View {
             }
         }
 
-        // wstandend(m_main_window_ptr);
         wrefresh(m_main_window_ptr);
-        // wrefresh(m_command_window_ptr);
     }
 
     void display_command(std::string_view command) {
@@ -404,12 +376,31 @@ class View {
                    command.length());
         wrefresh(m_command_window_ptr);
     }
+
+    void display_command(std::string_view command, uint16_t cursor_pos) {
+        std::scoped_lock lock(*nc_mutex);
+        werase(m_command_window_ptr);
+        wattrset(m_command_window_ptr, WA_NORMAL);
+        mvwaddnstr(m_command_window_ptr, 0, 0, command.data(),
+                   command.length());
+
+        // wstandend(m_command_window_ptr);
+        mvwchgat(m_command_window_ptr, 0, (int)cursor_pos, (int)1, WA_STANDOUT,
+                 0, NULL);
+        wrefresh(m_command_window_ptr);
+    }
+
     void display_status(std::string_view status) {
         std::scoped_lock lock(*nc_mutex);
         werase(m_command_window_ptr);
         wattrset(m_command_window_ptr, WA_STANDOUT);
         mvwaddnstr(m_command_window_ptr, 0, 0, status.data(), status.length());
         wrefresh(m_command_window_ptr);
+    }
+
+    void display_status() {
+        std::string relative_path = m_model->relative_path();
+        display_status(relative_path);
     }
 
     void handle_resize() {
@@ -433,8 +424,4 @@ class View {
         // update cursor
         m_cursor.m_screen_width = (size_t)COLS;
     }
-
-    // void update_state() {
-    //     m_text_widget.update_state();
-    // }
 };
