@@ -135,27 +135,43 @@ int main(int argc, char **argv) {
         }
         case Command::SEARCH_NEXT: { // assume for now that search_exec was
                                      // definitely called
+
+            command_str_buffer = command.payload;
             fprintf(stderr, "search-next executing on [%s]\n",
                     command_str_buffer.c_str());
-            std::string search_pattern{command_str_buffer.begin() + 1,
-                                       command_str_buffer.end()};
 
             if (view.begin() == view.end()) {
                 break;
             }
 
-            view.scroll_down();
+            std::string_view contents = model.get_contents();
+            std::string search_pattern{command_str_buffer.begin() + 1,
+                                       command_str_buffer.end()};
+            size_t left_bound = view.get_starting_offset();
+            size_t curr_line_end = view.cursor().get_ending_offset();
+            size_t right_bound = contents.size();
 
+            // if it doesnt exist on the current line, don't
+            // it means it doesnt exist.
             size_t first_match = basic_search_first(
-                model.get_contents(), search_pattern,
-                view.get_starting_offset(), model.length(),
+                contents, search_pattern, left_bound, curr_line_end,
+                caseless_mode != CaselessSearchMode::SENSITIVE);
+            if (first_match == curr_line_end ||
+                first_match == std::string::npos) {
+                // this needs to change depending on whether there was already a
+                // search being done
+                view.display_status("Pattern not found");
+                break;
+            }
+
+            // dont bother scrolling down if we know what offset to start from
+            // view.scroll_down();
+            first_match = basic_search_first(
+                contents, search_pattern, curr_line_end, right_bound,
                 caseless_mode != CaselessSearchMode::SENSITIVE);
 
             if (first_match == model.length() ||
                 first_match == std::string::npos) {
-                // this needs to change depending on whether there was already a
-                // search being done
-                view.scroll_up();
                 view.display_status("(END)");
             } else {
                 view.move_to_byte_offset(first_match);
@@ -177,16 +193,19 @@ int main(int argc, char **argv) {
         case Command::SEARCH_EXEC: {
             fprintf(stderr, "search executing on [%s]\n",
                     command_str_buffer.c_str());
-            std::string search_pattern{command_str_buffer.begin() + 1,
-                                       command_str_buffer.end()};
 
             if (view.begin() == view.end()) {
                 break;
             }
 
+            std::string_view contents = model.get_contents();
+            std::string search_pattern{command_str_buffer.begin() + 1,
+                                       command_str_buffer.end()};
+            size_t left_bound = view.get_starting_offset();
+            size_t right_bound = contents.size();
+
             size_t first_match = basic_search_first(
-                model.get_contents(), search_pattern,
-                view.get_starting_offset(), model.length(),
+                contents, search_pattern, left_bound, right_bound,
                 caseless_mode != CaselessSearchMode::SENSITIVE);
 
             if (first_match == model.length() ||

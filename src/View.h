@@ -200,6 +200,14 @@ class View {
         return DisplayableLineIt(line, (size_t)width);
     }
 
+    DisplayableLineIt &cursor() {
+        return m_cursor;
+    }
+
+    DisplayableLineIt const &cursor() const {
+        return m_cursor;
+    }
+
     DisplayableLineIt get_line_at_byte_offset(size_t offset) {
         DisplayableLineIt it =
             get_line_at(m_model->get_line_at_byte_offset(offset));
