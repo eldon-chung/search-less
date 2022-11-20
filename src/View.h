@@ -27,35 +27,32 @@ class View {
 
         Model::LineIt m_line_it;
         size_t m_screen_width;
-        size_t m_line_offset;   // starting position in m_line_it
         size_t m_global_offset; // byte position of start of line in m_contents
                                 // of model
                                 // TODO: make it an iterator haha
-        size_t m_length;
 
         DisplayableLineIt(Model::LineIt line_it, size_t screen_width,
-                          size_t m_line_offset, size_t global_offset,
-                          size_t m_length)
+                          size_t global_offset)
             : m_line_it(std::move(line_it)), m_screen_width(screen_width),
-              m_line_offset(m_line_offset), m_global_offset(global_offset),
-              m_length(m_length) {
+              m_global_offset(global_offset) {
         }
 
         DisplayableLineIt(Model::LineIt line_it, size_t screen_width)
             : m_line_it(std::move(line_it)), m_screen_width(screen_width),
-              m_line_offset(0), m_global_offset(m_line_it.m_offset),
-              m_length(std::min(m_screen_width, m_line_it->length())) {
+              m_global_offset(m_line_it.m_offset) {
         }
 
         bool operator==(const DisplayableLineIt &other) const {
-            return (m_screen_width == other.m_screen_width) &&
-                   (m_line_offset == other.m_line_offset) &&
-                   (m_global_offset == other.m_global_offset) &&
-                   (m_length == other.m_length);
+            return (m_global_offset == other.m_global_offset);
+        }
+
+        size_t relative_line_offset() const {
+            assert(m_global_offset >= m_line_it.m_offset);
+            return m_global_offset - m_line_it.m_offset;
         }
 
         std::string_view operator*() const {
-            return m_line_it->substr(m_line_offset, m_screen_width);
+            return m_line_it->substr(relative_line_offset());
         }
 
         struct Cursed {
@@ -69,16 +66,13 @@ class View {
         }
 
         DisplayableLineIt &operator++() {
-            if (m_line_offset + m_screen_width < m_line_it->length()) {
-                m_line_offset += m_screen_width;
+            if (relative_line_offset() + m_screen_width < m_line_it->length()) {
                 m_global_offset += m_screen_width;
-                m_length = m_screen_width;
             } else {
                 // I might be off by 1
-                m_global_offset += (m_line_it->length() - m_line_offset);
+                m_global_offset +=
+                    (m_line_it->length() - relative_line_offset());
                 ++m_line_it;
-                m_line_offset = 0;
-                m_length = std::min(m_line_it->length(), m_screen_width);
             }
 
             return *this;
@@ -91,10 +85,10 @@ class View {
         }
 
         DisplayableLineIt &operator--() {
-            if (m_line_offset >= m_screen_width) {
-                m_line_offset -= m_screen_width;
+            if (relative_line_offset() >= m_screen_width) {
+                fprintf(stderr, "staying on same model line; relative %zu\n",
+                        relative_line_offset());
                 m_global_offset -= m_screen_width;
-                m_length = m_screen_width;
             } else {
                 // if not you need to move back by 1 line and start figuring
                 // out what the correct truncation is. but how do you do this
@@ -102,16 +96,10 @@ class View {
                 --m_line_it;
                 assert(m_line_it->length() >= 1);
                 size_t num_skips = (m_line_it->length() - 1) / m_screen_width;
-                m_line_offset = num_skips * m_screen_width;
-                // do we actually ever need this? perhaps for something else
-                m_global_offset =
-                    (m_global_offset - m_line_it->length() + m_line_offset);
+                size_t new_offset = num_skips * m_screen_width;
 
-                if (m_line_it->length() % m_screen_width == 0) {
-                    m_length = m_screen_width;
-                } else {
-                    m_length = m_line_it->length() % m_screen_width;
-                }
+                m_global_offset =
+                    (m_global_offset - m_line_it->length() + new_offset);
             }
             return *this;
         }
@@ -160,7 +148,7 @@ class View {
     DisplayableLineIt end() const {
         int height, width;
         getmaxyx(stdscr, height, width);
-        return {m_model->end(), (size_t)width, 0, m_model->length(), 0};
+        return {m_model->end(), (size_t)width};
     }
 
     static View initialize(std::mutex *nc_mutex, const Model *model) {
@@ -178,8 +166,6 @@ class View {
         getmaxyx(stdscr, height, width);
         // Construct the view with the main screen, and passing in height and
         // width
-
-        fprintf(stderr, "initialize %d, cols %d\n", height, width);
 
         WINDOW *command_window_ptr = newwin(1, width, height - 1, 0);
         if (command_window_ptr == NULL) {
@@ -300,7 +286,6 @@ class View {
         werase(m_main_window_ptr);
 
         auto page_lines_it = m_cursor;
-
         for (int display_row = 0; display_row < height; display_row++) {
             if (page_lines_it != end()) {
                 std::string display_string = strip_r(*page_lines_it);
