@@ -123,9 +123,10 @@ int main(int argc, char **argv) {
             if (view.begin() == view.end()) {
                 break;
             }
-            size_t first_match =
-                basic_search_first(model.get_contents(), command.payload,
-                                   view.get_starting_offset(), model.length());
+            size_t first_match = basic_search_first(
+                model.get_contents(), command.payload,
+                view.get_starting_offset(), model.length(),
+                caseless_mode != CaselessSearchMode::SENSITIVE);
             if (first_match == model.length() ||
                 first_match == std::string::npos) {
                 view.move_to_end();
