@@ -36,6 +36,9 @@ struct InputThread {
     std::thread t;
     struct pollfd pollfds[1];
 
+    std::string pattern_buf = "";
+    uint16_t cursor_pos = 0;
+
     InputThread(std::mutex *nc_mutex, Channel<Command> *chan)
         : nc_mutex(nc_mutex), chan(chan), t(&InputThread::start, this) {
         pollfds[0].fd = open("/dev/tty", O_RDONLY);
@@ -78,8 +81,8 @@ struct InputThread {
                 chan->push({Command::VIEW_EOF});
                 break;
             case '/': {
-                std::string pattern_buf = "/";
-                uint16_t cursor_pos = 1;
+                pattern_buf = "/";
+                cursor_pos = 1;
 
                 // start search mode in main
                 chan->push({Command::SEARCH_START, pattern_buf});
@@ -140,7 +143,7 @@ struct InputThread {
                 break;
             }
             case 'n': // this needs to work with search history eventually;
-                chan->push({Command::SEARCH_NEXT, ""});
+                chan->push({Command::SEARCH_NEXT, pattern_buf});
                 break;
             case '-': {
                 chan->push({Command::DISPLAY_COMMAND, "Set option: -"});
