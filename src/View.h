@@ -289,14 +289,19 @@ class View {
         werase(m_main_window_ptr);
 
         auto page_lines_it = m_cursor;
-        for (int display_row = 0; display_row < height; display_row++) {
+        for (int display_row = 0; display_row < height;) {
             if (page_lines_it != end()) {
                 std::string display_string = strip_r(*page_lines_it);
-                mvwaddnstr(m_main_window_ptr, display_row, 0,
-                           display_string.c_str(), display_string.length());
+                if (!display_string.empty() ||
+                    page_lines_it.relative_line_offset() == 0) {
+                    mvwaddnstr(m_main_window_ptr, display_row, 0,
+                               display_string.c_str(), display_string.length());
+                    display_row++;
+                }
                 ++page_lines_it;
             } else {
                 mvwaddnstr(m_main_window_ptr, display_row, 0, "~", 1);
+                display_row++;
             }
         }
         wrefresh(m_main_window_ptr);
