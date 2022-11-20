@@ -58,10 +58,10 @@ struct InputThread {
                 chan->push({Command::VIEW_EOF});
                 break;
             case '/':
-                chan->push({Command::SEARCH, "#include"});
+                chan->push({Command::SEARCH, "break"});
                 break;
             case 'n':
-                chan->push({Command::SEARCH_NEXT, "#include"});
+                chan->push({Command::SEARCH_NEXT, "break"});
                 break;
             case '-': {
                 chan->push({Command::DISPLAY_COMMAND, "Set option: -"});

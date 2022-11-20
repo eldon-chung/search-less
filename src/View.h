@@ -324,9 +324,8 @@ class View {
                 // fprintf(stderr, "relative line offset %d,  %zu, length
                 // %zu\n",
                 //         display_row, starting_col, length);
-                mvwchgat(window_ptr, display_row,
-                         (int)starting_col - (int)length, (int)length,
-                         A_STANDOUT, COLOR_WHITE, NULL);
+                mvwchgat(window_ptr, display_row, (int)starting_col,
+                         (int)length, WA_STANDOUT, 0, NULL);
                 // wstandend(window_ptr);
             };
 
@@ -337,7 +336,6 @@ class View {
         werase(m_main_window_ptr);
         size_t highlight_idx = 0;
 
-        wstandend(m_main_window_ptr);
         // wstandout(m_main_window_ptr);
         // if (highlight_list.empty()) {
         //     wstandend(m_main_window_ptr);
@@ -352,8 +350,8 @@ class View {
                 std::string display_string = strip_r(*page_lines_it);
                 if (!display_string.empty() ||
                     page_lines_it.relative_line_offset() == 0) {
-                    mvwaddnstr(m_main_window_ptr, display_row, 0,
-                               display_string.c_str(), display_string.length());
+                    mvwaddstr(m_main_window_ptr, display_row, 0,
+                              display_string.c_str());
                     display_row++;
                 }
                 ++page_lines_it;
@@ -368,6 +366,7 @@ class View {
 
         // start from the top again
         page_lines_it = m_cursor;
+        wstandend(m_main_window_ptr);
 
         for (int display_row = 0; display_row < height; display_row++) {
             if (page_lines_it != end()) {
