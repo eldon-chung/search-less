@@ -169,6 +169,7 @@ int main(int argc, char **argv) {
                     fprintf(stderr, "global offset %zu\n", offset);
                 }
                 view.display_page_at(highlight_list);
+                command_str_buffer = ":";
                 view.display_command(":");
             }
             break;
@@ -207,6 +208,7 @@ int main(int argc, char **argv) {
                     fprintf(stderr, "global offset %zu\n", offset);
                 }
                 view.display_page_at(highlight_list);
+                command_str_buffer = ":";
                 view.display_command(":");
             }
             break;
