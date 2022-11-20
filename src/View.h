@@ -17,20 +17,6 @@
 //  thing that just holds a text_window, and given the state that needs to be
 //  rendered drives the entire rendering logic
 class View {
-    // we need to learn how to winch
-    std::mutex *nc_mutex;
-    WINDOW *m_main_window_ptr;
-    WINDOW *m_command_window_ptr;
-
-    const Model *m_model;
-
-  private:
-    View(std::mutex *nc_mutex, WINDOW *main_window_ptr,
-         WINDOW *command_window_ptr, const Model *model)
-        : nc_mutex(nc_mutex), m_main_window_ptr(main_window_ptr),
-          m_command_window_ptr(command_window_ptr), m_model(model) {
-    }
-
   public:
     struct DisplayableLineIt {
         using difference_type = size_t;
@@ -137,6 +123,24 @@ class View {
         }
     };
 
+    // we need to learn how to winch
+    std::mutex *nc_mutex;
+    WINDOW *m_main_window_ptr;
+    WINDOW *m_command_window_ptr;
+    DisplayableLineIt m_cursor;
+
+    const Model *m_model;
+
+  private:
+    View(std::mutex *nc_mutex, WINDOW *main_window_ptr,
+         WINDOW *command_window_ptr, const Model *model,
+         DisplayableLineIt cursor)
+        : nc_mutex(nc_mutex), m_main_window_ptr(main_window_ptr),
+          m_command_window_ptr(command_window_ptr), m_cursor(std::move(cursor)),
+          m_model(model) {
+    }
+
+  public:
     View(View const &) = delete;
     View &operator=(View const &) = delete;
     View(View &&) = delete;
@@ -183,7 +187,13 @@ class View {
             exit(1);
         }
         wresize(stdscr, height - 1, width);
-        return View(nc_mutex, stdscr, command_window_ptr, model);
+
+        auto model_line_it = model->get_line_at_byte_offset(0);
+        auto cursor =
+            DisplayableLineIt(std::move(model_line_it), (size_t)width);
+
+        return View(nc_mutex, stdscr, command_window_ptr, model,
+                    std::move(cursor));
     }
 
     DisplayableLineIt get_line_at(Model::LineIt line) {
@@ -233,13 +243,42 @@ class View {
         size_t len;
     };
 
-    void display_page_at(DisplayableLineIt displayable_line_it,
-                         const std::vector<Highlights> &) {
-        std::scoped_lock lock(*nc_mutex);
-        int height, width;
-        getmaxyx(m_main_window_ptr, height, width);
+    void scroll_up() {
+        if (m_cursor != begin()) {
+            --m_cursor;
+        }
+        // --m_cursor;
+    }
 
-        werase(m_main_window_ptr);
+    void scroll_down() {
+        ++m_cursor;
+        if (m_cursor == end()) {
+            --m_cursor;
+        }
+    }
+
+    void move_to_top() {
+        m_cursor = begin();
+    }
+
+    void move_to_end() {
+        if (end() != begin()) {
+            m_cursor = end();
+            --m_cursor;
+        } else {
+            m_cursor = begin();
+        }
+    }
+
+    void move_to_byte_offset(size_t offset) {
+        m_cursor = get_line_at_byte_offset(offset);
+    }
+
+    size_t get_starting_offset() {
+        return m_cursor.m_global_offset;
+    }
+
+    void display_page_at(const std::vector<Highlights> &) {
 
         auto strip_r = [](std::string_view str) -> std::string {
             std::string display_string(str);
@@ -254,12 +293,20 @@ class View {
             return display_string;
         };
 
+        std::scoped_lock lock(*nc_mutex);
+        int height, width;
+        getmaxyx(m_main_window_ptr, height, width);
+
+        werase(m_main_window_ptr);
+
+        auto page_lines_it = m_cursor;
+
         for (int display_row = 0; display_row < height; display_row++) {
-            if (displayable_line_it != end()) {
-                std::string display_string = strip_r(*displayable_line_it);
+            if (page_lines_it != end()) {
+                std::string display_string = strip_r(*page_lines_it);
                 mvwaddnstr(m_main_window_ptr, display_row, 0,
                            display_string.c_str(), display_string.length());
-                ++displayable_line_it;
+                ++page_lines_it;
             } else {
                 mvwaddnstr(m_main_window_ptr, display_row, 0, "~", 1);
             }
@@ -267,6 +314,7 @@ class View {
         wrefresh(m_main_window_ptr);
         wrefresh(m_command_window_ptr);
     }
+
     void display_command(std::string_view command) {
         std::scoped_lock lock(*nc_mutex);
         werase(m_command_window_ptr);
@@ -279,7 +327,6 @@ class View {
         werase(m_command_window_ptr);
         wattrset(m_command_window_ptr, WA_STANDOUT);
         mvwaddnstr(m_command_window_ptr, 0, 0, status.data(), status.length());
-        wattrset(m_command_window_ptr, WA_STANDOUT);
         wrefresh(m_command_window_ptr);
     }
 

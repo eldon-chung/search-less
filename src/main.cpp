@@ -37,9 +37,9 @@ int main(int argc, char **argv) {
     Model model = Model::initialize(std::move(read_file));
     View view = View::initialize(&nc_mutex, &model);
 
-    View::DisplayableLineIt cursor =
-        view.get_line_at(model.get_line_at_byte_offset(0));
-    view.display_page_at(cursor, {});
+    // View::DisplayableLineIt cursor =
+    //     view.get_line_at(model.get_line_at_byte_offset(0));
+    view.display_page_at({});
     view.display_status("Hello, this is a status");
 
     InputThread input(&nc_mutex, &chan);
@@ -52,44 +52,34 @@ int main(int argc, char **argv) {
             break;
         case Command::RESIZE:
             view.handle_resize();
-            view.display_page_at(cursor, {});
+            view.display_page_at({});
             view.display_status("handle resize called");
             break;
         case Command::QUIT:
             break;
         case Command::VIEW_DOWN:
-            ++cursor;
-            if (cursor == view.end()) {
-                --cursor;
-            } else {
-                view.display_page_at(cursor, {});
-            }
+            view.scroll_down();
+            view.display_page_at({});
             break;
         case Command::VIEW_UP:
-            if (cursor != view.begin()) {
-                --cursor;
-            }
-            view.display_page_at(cursor, {});
+            view.scroll_up();
+            view.display_page_at({});
             break;
         case Command::VIEW_BOF:
-            cursor = view.begin();
-            view.display_page_at(cursor, {});
+            view.move_to_top();
+            view.display_page_at({});
             break;
         case Command::VIEW_EOF:
             model.read_to_eof();
-            if (view.end() != view.begin()) {
-                cursor = view.end();
-                --cursor;
-            } else {
-                cursor = view.begin();
-            }
-            view.display_page_at(cursor, {});
+            view.move_to_end();
+            view.display_page_at({});
             break;
         case Command::SEARCH_NEXT: {
             if (view.begin() == view.end()) {
                 break;
             }
-            ++cursor;
+            // ++cursor;
+            view.scroll_down();
             [[fallthrough]];
         }
         case Command::SEARCH: {
@@ -98,14 +88,14 @@ int main(int argc, char **argv) {
             }
             size_t first_match =
                 basic_search_first(model.get_contents(), command.payload,
-                                   cursor.m_global_offset, model.length());
-            if (first_match == model.length()) {
-                cursor = view.end();
-                --cursor;
+                                   view.get_starting_offset(), model.length());
+            if (first_match == model.length() ||
+                first_match == std::string::npos) {
+                view.move_to_end();
             } else {
-                cursor = view.get_line_at_byte_offset(first_match);
+                view.move_to_byte_offset(first_match);
             }
-            view.display_page_at(cursor, {});
+            view.display_page_at({});
             break;
         }
         }
