@@ -51,6 +51,15 @@ class View {
             return m_global_offset - m_line_it.m_offset;
         }
 
+        size_t get_starting_offset() const {
+            return m_global_offset;
+        }
+
+        size_t get_ending_offset() const {
+            return std::min(m_line_it.m_offset + m_line_it->length(),
+                            m_global_offset + m_screen_width);
+        }
+
         std::string_view operator*() const {
             return m_line_it->substr(relative_line_offset());
         }
@@ -227,9 +236,8 @@ class View {
     }
 
     struct Highlights {
-        Model::LineIt line;
-        size_t start_col;
-        size_t len;
+        size_t offset;
+        size_t length;
     };
 
     void scroll_up() {
@@ -263,11 +271,24 @@ class View {
         m_cursor = get_line_at_byte_offset(offset);
     }
 
-    size_t get_starting_offset() {
+    size_t get_starting_offset() const {
         return m_cursor.m_global_offset;
     }
 
-    void display_page_at(const std::vector<Highlights> &) {
+    size_t get_ending_offset() const {
+        auto line_view_it = m_cursor;
+
+        int height, width;
+        getmaxyx(m_main_window_ptr, height, width);
+
+        while (height-- > 0 && line_view_it != end()) {
+            ++line_view_it;
+        }
+
+        return line_view_it.m_global_offset;
+    }
+
+    void display_page_at(const std::vector<Highlights> &highlight_list) {
 
         auto strip_r = [](std::string_view str) -> std::string {
             std::string display_string(str);
@@ -282,11 +303,46 @@ class View {
             return display_string;
         };
 
+        auto place_attr_on_line =
+            [](WINDOW *window_ptr, const DisplayableLineIt &page_lines_it,
+               const std::vector<Highlights> &highlight_list,
+               size_t starting_idx, int display_row) {
+                // wstandout(window_ptr);
+                size_t starting_col = highlight_list[starting_idx].offset -
+                                      page_lines_it.relative_line_offset() -
+                                      page_lines_it.get_starting_offset();
+                size_t length = highlight_list[starting_idx].length;
+                fprintf(stderr,
+                        "highlight offset %zu, relative offset  %zu, starting "
+                        "offset %zu = starting_col %d length %zu at row %d\n",
+                        highlight_list[starting_idx].offset,
+                        page_lines_it.relative_line_offset(),
+                        page_lines_it.get_starting_offset(), (int)starting_col,
+                        length, display_row);
+                // fprintf(stderr, "row %d, col %zu, length %zu\n", display_row,
+                //         starting_col, length);
+                // fprintf(stderr, "relative line offset %d,  %zu, length
+                // %zu\n",
+                //         display_row, starting_col, length);
+                mvwchgat(window_ptr, display_row, (int)starting_col,
+                         (int)length, WA_STANDOUT, 0, NULL);
+                // wstandend(window_ptr);
+            };
+
         std::scoped_lock lock(*nc_mutex);
         int height, width;
         getmaxyx(m_main_window_ptr, height, width);
 
         werase(m_main_window_ptr);
+        size_t highlight_idx = 0;
+
+        // wstandout(m_main_window_ptr);
+        // if (highlight_list.empty()) {
+        //     wstandend(m_main_window_ptr);
+        // }
+
+        //  int mvwchgat(WINDOW *win, int y, int x, int n, attr_t attr, short
+        //  color, const void *opts)
 
         auto page_lines_it = m_cursor;
         for (int display_row = 0; display_row < height;) {
@@ -294,8 +350,8 @@ class View {
                 std::string display_string = strip_r(*page_lines_it);
                 if (!display_string.empty() ||
                     page_lines_it.relative_line_offset() == 0) {
-                    mvwaddnstr(m_main_window_ptr, display_row, 0,
-                               display_string.c_str(), display_string.length());
+                    mvwaddstr(m_main_window_ptr, display_row, 0,
+                              display_string.c_str());
                     display_row++;
                 }
                 ++page_lines_it;
@@ -303,9 +359,41 @@ class View {
                 mvwaddnstr(m_main_window_ptr, display_row, 0, "~", 1);
                 display_row++;
             }
+
+            // need the offsets to come in sorted order (better if reversed
+            // actually)
         }
+
+        // start from the top again
+        page_lines_it = m_cursor;
+        wstandend(m_main_window_ptr);
+
+        for (int display_row = 0; display_row < height; display_row++) {
+            if (page_lines_it != end()) {
+                fprintf(stderr, "current line start end offset %zu, %zu\n",
+                        page_lines_it.get_starting_offset(),
+                        page_lines_it.get_ending_offset());
+                while (highlight_idx < highlight_list.size() &&
+                       highlight_list[highlight_idx].offset >=
+                           page_lines_it.get_starting_offset() &&
+                       highlight_list[highlight_idx].offset <
+                           page_lines_it.get_ending_offset()) {
+                    // wstandend(m_main_window_ptr);
+
+                    place_attr_on_line(m_main_window_ptr, page_lines_it,
+                                       highlight_list, highlight_idx,
+                                       display_row);
+                    highlight_idx++;
+                }
+                ++page_lines_it;
+            } else {
+                break;
+            }
+        }
+
+        // wstandend(m_main_window_ptr);
         wrefresh(m_main_window_ptr);
-        wrefresh(m_command_window_ptr);
+        // wrefresh(m_command_window_ptr);
     }
 
     void display_command(std::string_view command) {

@@ -132,8 +132,19 @@ int main(int argc, char **argv) {
                 view.move_to_end();
             } else {
                 view.move_to_byte_offset(first_match);
+                auto result_offsets = basic_search_all(
+                    model.get_contents(), command.payload,
+                    view.get_starting_offset(), view.get_ending_offset());
+                // std::vector<size_t> result_offsets = {first_match};
+                std::vector<View::Highlights> highlight_list;
+                highlight_list.reserve(result_offsets.size());
+                for (size_t offset : result_offsets) {
+                    highlight_list.push_back(
+                        {offset, command.payload.length()});
+                    fprintf(stderr, "global offset %zu\n", offset);
+                }
+                view.display_page_at(highlight_list);
             }
-            view.display_page_at({});
             break;
         }
         }

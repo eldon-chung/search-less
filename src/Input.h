@@ -58,14 +58,10 @@ struct InputThread {
                 chan->push({Command::VIEW_EOF});
                 break;
             case '/':
-                chan->push(
-                    {Command::SEARCH,
-                     "Verification succeeded for blk_4258862871822415442"});
+                chan->push({Command::SEARCH, "break"});
                 break;
             case 'n':
-                chan->push(
-                    {Command::SEARCH_NEXT,
-                     "Verification succeeded for blk_4258862871822415442"});
+                chan->push({Command::SEARCH_NEXT, "break"});
                 break;
             case '-': {
                 chan->push({Command::DISPLAY_COMMAND, "Set option: -"});
