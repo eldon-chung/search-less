@@ -277,6 +277,7 @@ class View {
     void display_status(std::string_view status) {
         std::scoped_lock lock(*nc_mutex);
         werase(m_command_window_ptr);
+        wattrset(m_command_window_ptr, WA_STANDOUT);
         mvwaddnstr(m_command_window_ptr, 0, 0, status.data(), status.length());
         wattrset(m_command_window_ptr, WA_STANDOUT);
         wrefresh(m_command_window_ptr);
