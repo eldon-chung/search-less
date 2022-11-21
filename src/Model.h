@@ -10,25 +10,31 @@
 
 #include <assert.h>
 #include <fcntl.h>
+#include <future>
 #include <stdio.h>
+#include <stop_token>
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/unistd.h>
 
+#include "Channel.h"
+
 class Model {
     // A model is a collection of lines, and possibly known or unknown line
     // numbers, computed lazily / asynchronously
     std::filesystem::directory_entry m_de;
     std::string_view m_contents;
-    // std::vector<size_t> m_line_offsets;
+    std::vector<size_t> m_line_idxs;
+    size_t m_num_processed_bytes;
     // should we be using string view?
     int m_fd;
 
     Model(std::filesystem::directory_entry de, std::string_view contents,
           int fd)
-        : m_de(std::move(de)), m_contents(std::move(contents)), m_fd(fd) {
+        : m_de(std::move(de)), m_contents(std::move(contents)),
+          m_num_processed_bytes(0), m_fd(fd) {
     }
 
   public:
@@ -54,30 +60,6 @@ class Model {
 
         std::string_view contents{contents_ptr, (size_t)statbuf.st_size};
 
-        // std::vector<size_t> line_lengths;
-        // std::string_view remaining_contents = contents;
-        // while (!remaining_contents.empty()) {
-        //     size_t first_idx = remaining_contents.find_first_of("\n");
-        //     if (first_idx == std::string::npos) {
-        //         // if no more newlines, we know the remaining contents is the
-        //         // last line length
-        //         line_lengths.push_back(remaining_contents.size());
-        //         break;
-        //     }
-
-        //     // line is of length first_idx + 1 (we need to include the
-        //     newline
-        //     // itself)
-        //     line_lengths.push_back(first_idx + 1);
-        //     // remove the prefix along with the newline
-        //     remaining_contents.remove_prefix(first_idx + 1);
-        // }
-
-        // we need to make the array cumulative instead
-        // for (size_t idx = 1; idx < line_lengths.size(); idx++) {
-        //     line_lengths[idx] += line_lengths[idx - 1];
-        // }
-
         return Model(std::move(de), std::move(contents), fd);
     }
     Model(Model const &) = delete;
@@ -88,9 +70,6 @@ class Model {
         munmap((void *)m_contents.data(), m_contents.size());
     }
 
-    // size_t num_lines() const {
-    //     return m_line_offsets.size();
-    // }
     struct LineIt {
         using difference_type = size_t;
         using value_type = std::string_view;
@@ -237,6 +216,21 @@ class Model {
         return m_contents;
     }
 
+    ssize_t num_byte_diff() const {
+        struct stat statbuf;
+        fstat(m_fd, &statbuf);
+
+        return (ssize_t)statbuf.st_size - (ssize_t)m_contents.length();
+    }
+
+    bool has_changed() const {
+        return num_byte_diff() != 0;
+    }
+
+    size_t get_num_processed_bytes() const {
+        return m_num_processed_bytes;
+    }
+
     ssize_t read_to_eof() {
         // stat the file
         struct stat statbuf;
@@ -265,9 +259,11 @@ class Model {
         return m_de.path().relative_path().string();
     }
 
-    // void update_line_offsets(const std::vector<size_t> &offsets) {
-    //     for (size_t offset : offsets) {
-    //         m_line_offsets.push_back(offset);
-    //     }
-    // }
+    void update_line_idxs(const std::vector<size_t> &offsets) {
+        assert(offsets.size() >= 1);
+        m_num_processed_bytes = offsets.back();
+        auto it = std::lower_bound(offsets.begin(), offsets.end(),
+                                   m_num_processed_bytes);
+        m_line_idxs.insert(m_line_idxs.end(), it, --offsets.end());
+    }
 };

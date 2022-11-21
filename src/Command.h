@@ -20,6 +20,7 @@ struct Command {
         TOGGLE_CASELESS,
         TOGGLE_CONDITIONALLY_CASELESS,
         BUFFER_CURS_POS,
+        UPDATE_LINE_IDXS,
     };
     Type type = INVALID;
     std::string payload_str = "";
