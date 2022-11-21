@@ -3,6 +3,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <optional>
 #include <queue>
 
 template <typename T> struct Channel {
@@ -31,12 +32,12 @@ template <typename T> struct Channel {
         cond.notify_one();
     }
 
-    optional<T> pop() {
+    std::optional<T> pop() {
         std::unique_lock lock(mut);
         cond.wait(lock,
                   [this]() { return !que.empty() || sig_que != nullptr; });
         if (sig_que != nullptr) {
-            T val = *sig_que;
+            T val = std::move(*sig_que);
             sig_que = nullptr;
             return val;
         }
