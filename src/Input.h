@@ -20,15 +20,15 @@ enum KeyType {
     OTHER,
 };
 
-static std::string to_payload(uint16_t val) {
-    std::string to_return;
+// static std::string to_payload(uint16_t val) {
+//     std::string to_return;
 
-    to_return.resize(2);
-    to_return[0] = (char)(val & 0xFF);
-    to_return[1] = (char)(val >> 8);
+//     to_return.resize(2);
+//     to_return[0] = (char)(val & 0xFF);
+//     to_return[1] = (char)(val >> 8);
 
-    return to_return;
-}
+//     return to_return;
+// }
 
 struct InputThread {
     std::mutex *nc_mutex;
@@ -87,7 +87,7 @@ struct InputThread {
                 // start search mode in main
                 chan->push({Command::SEARCH_START, pattern_buf});
                 // send it cursor position 0
-                chan->push({Command::BUFFER_CURS_POS, to_payload(cursor_pos)});
+                chan->push({Command::BUFFER_CURS_POS, "", {cursor_pos}});
                 while (true) {
                     int key = poll_and_getch();
                     switch (key) {
@@ -95,13 +95,13 @@ struct InputThread {
                         cursor_pos -= (cursor_pos > 1) ? 1 : 0;
                         chan->push({Command::SEARCH_START, pattern_buf});
                         chan->push(
-                            {Command::BUFFER_CURS_POS, to_payload(cursor_pos)});
+                            {Command::BUFFER_CURS_POS, "", {cursor_pos}});
                         break;
                     case KEY_RIGHT:
                         cursor_pos += (cursor_pos < pattern_buf.size()) ? 1 : 0;
                         chan->push({Command::SEARCH_START, pattern_buf});
                         chan->push(
-                            {Command::BUFFER_CURS_POS, to_payload(cursor_pos)});
+                            {Command::BUFFER_CURS_POS, "", {cursor_pos}});
                         break;
                     case KEY_UP:
                     case KEY_DOWN:
@@ -113,7 +113,7 @@ struct InputThread {
                         pattern_buf.erase(--cursor_pos, 1);
                         chan->push({Command::SEARCH_START, pattern_buf});
                         chan->push(
-                            {Command::BUFFER_CURS_POS, to_payload(cursor_pos)});
+                            {Command::BUFFER_CURS_POS, "", {cursor_pos}});
 
                         break;
                     case KEY_ENTER:
@@ -125,7 +125,7 @@ struct InputThread {
 
                         chan->push({Command::SEARCH_START, pattern_buf});
                         chan->push(
-                            {Command::BUFFER_CURS_POS, to_payload(cursor_pos)});
+                            {Command::BUFFER_CURS_POS, "", {cursor_pos}});
 
                         break;
                     }

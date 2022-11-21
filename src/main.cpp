@@ -9,13 +9,13 @@
 #include "View.h"
 #include "search.h"
 
-static uint16_t from_payload(const std::string &payload) {
-    assert(payload.size() == 2);
-    uint16_t first_half = (uint16_t)payload[0];
-    first_half |= (uint16_t)payload[1] << 8;
+// static uint16_t from_payload(const std::string &payload) {
+//     assert(payload.size() == 2);
+//     uint16_t first_half = (uint16_t)payload[0];
+//     first_half |= (uint16_t)payload[1] << 8;
 
-    return first_half;
-}
+//     return first_half;
+// }
 
 int main(int argc, char **argv) {
     Channel<Command> chan;
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
 
         switch (command.type) {
         case Command::INVALID:
-            view.display_status("Invalid key pressed: " + command.payload);
+            view.display_status("Invalid key pressed: " + command.payload_str);
             break;
         case Command::RESIZE:
             view.handle_resize();
@@ -94,17 +94,17 @@ int main(int argc, char **argv) {
             view.display_page_at({});
             break;
         case Command::DISPLAY_COMMAND: {
-            view.display_command(command.payload);
+            view.display_command(command.payload_str);
             break;
         }
         case Command::TOGGLE_CASELESS: {
             if (caseless_mode == CaselessSearchMode::INSENSITIVE) {
                 caseless_mode = CaselessSearchMode::SENSITIVE;
-                view.display_status(command.payload +
+                view.display_status(command.payload_str +
                                     ": Caseless search disabled");
             } else {
                 caseless_mode = CaselessSearchMode::INSENSITIVE;
-                view.display_status(command.payload +
+                view.display_status(command.payload_str +
                                     ": Caseless search enabled");
             }
             break;
@@ -112,19 +112,19 @@ int main(int argc, char **argv) {
         case Command::TOGGLE_CONDITIONALLY_CASELESS: {
             if (caseless_mode == CaselessSearchMode::CONDITIONALLY_SENSITIVE) {
                 caseless_mode = CaselessSearchMode::SENSITIVE;
-                view.display_status(command.payload +
+                view.display_status(command.payload_str +
                                     ": Caseless search disabled");
             } else {
                 caseless_mode = CaselessSearchMode::CONDITIONALLY_SENSITIVE;
                 view.display_status(
-                    command.payload +
+                    command.payload_str +
                     ": Conditionally caseless search enabled (case is "
                     "ignored if pattern only contains lowercase)");
             }
             break;
         }
         case Command::SEARCH_START: {
-            command_str_buffer = command.payload;
+            command_str_buffer = command.payload_str;
             // we expect the next incoming command to trigger the redraw
             break;
         }
@@ -136,7 +136,7 @@ int main(int argc, char **argv) {
         case Command::SEARCH_PREV: { // assume for now that search_exec was
                                      // definitely called
 
-            command_str_buffer = command.payload;
+            command_str_buffer = command.payload_str;
             fprintf(stderr, "search-prev executing on [%s]\n",
                     command_str_buffer.c_str());
 
@@ -204,7 +204,7 @@ int main(int argc, char **argv) {
         case Command::SEARCH_NEXT: { // assume for now that search_exec was
                                      // definitely called
 
-            command_str_buffer = command.payload;
+            command_str_buffer = command.payload_str;
             // fprintf(stderr, "search-next executing on [%s]\n",
             // command_str_buffer.c_str());
 
@@ -301,7 +301,8 @@ int main(int argc, char **argv) {
             break;
         }
         case Command::BUFFER_CURS_POS: {
-            command_cursor_pos = from_payload(command.payload);
+            // command_cursor_pos = from_payload(command.payload_str);
+            command_cursor_pos = (uint16_t)command.payload_nums.front();
             // fprintf(stderr, "printing command buffer: %s\n",
             //         command_str_buffer.c_str());
             view.display_command(command_str_buffer, command_cursor_pos);

@@ -22,5 +22,6 @@ struct Command {
         BUFFER_CURS_POS,
     };
     Type type = INVALID;
-    std::string payload = "";
+    std::string payload_str = "";
+    std::vector<size_t> payload_nums = {};
 };
