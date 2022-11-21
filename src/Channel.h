@@ -31,7 +31,7 @@ template <typename T> struct Channel {
         cond.notify_one();
     }
 
-    T pop() {
+    optional<T> pop() {
         std::unique_lock lock(mut);
         cond.wait(lock,
                   [this]() { return !que.empty() || sig_que != nullptr; });
@@ -43,5 +43,8 @@ template <typename T> struct Channel {
         T top = std::move(que.front());
         que.pop();
         return top;
+    }
+
+    void close() {
     }
 };
