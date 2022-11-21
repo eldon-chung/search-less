@@ -1,20 +1,22 @@
 #include "search.h"
 #include <cstring>
 
-static std::string tolower(std::string_view s) {
-    std::string out;
-    out.resize(s.size());
-    std::transform(s.begin(), s.end(), out.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
-    return out;
+void tolower(const char *s, const char *end, char *out) {
+    std::transform(s, end, out, [](char c) {
+        return c + (c >= 'A' && c <= 'Z') * ('a' - 'A');
+    });
 }
 
-template <size_t N> void tolowerN(const char *s, char *out) {
-    for (size_t i = 0; i < N; ++i) {
-        char c = s[i];
-        c += (s[i] >= 'A' && s[i] <= 'Z') * ('a' - 'A');
-        *(out++) = c;
-    }
+void approx_tolower(const char *s, const char *end, char *out) {
+    std::transform(s, end, out, [](char c) { return (c & 0x1f) | 0x40; });
+}
+
+void tolower(std::string_view in, char *out) {
+    tolower(in.data(), in.data() + in.length(), out);
+}
+
+void approx_tolower(std::string_view in, char *out) {
+    approx_tolower(in.data(), in.data() + in.length(), out);
 }
 
 std::vector<size_t> basic_search_all(std::string_view file_contents,
@@ -22,25 +24,17 @@ std::vector<size_t> basic_search_all(std::string_view file_contents,
                                      size_t beginning_offset,
                                      size_t ending_offset,
                                      bool caseless /* = false */) {
-
-    auto bm_searcher =
-        std::boyer_moore_searcher(pattern.begin(), pattern.end());
-    std::vector<size_t> result_offsets;
-
-    auto it = std::search(file_contents.begin() + beginning_offset,
-                          file_contents.begin() + ending_offset, bm_searcher);
-
-    while (it != file_contents.begin() + ending_offset) {
-        result_offsets.push_back((size_t)(it - file_contents.begin()));
-
-        beginning_offset =
-            ((size_t)(it - file_contents.begin()) + pattern.length());
-
-        it = std::search(file_contents.begin() + beginning_offset,
-                         file_contents.begin() + ending_offset, bm_searcher);
+    std::vector<size_t> out;
+    while (true) {
+        size_t offset = basic_search_first(
+            file_contents, pattern, beginning_offset, ending_offset, caseless);
+        if (offset == ending_offset) {
+            break;
+        }
+        out.push_back(offset);
+        beginning_offset = offset + 1;
     }
-
-    return result_offsets;
+    return out;
 }
 
 size_t basic_search_first(std::string_view file_contents,
@@ -55,38 +49,72 @@ size_t basic_search_first(std::string_view file_contents,
         return beginning_offset;
     }
     if (caseless) {
-        std::string lower_pattern = tolower(pattern);
-        char *lower_pattern_ptr = const_cast<char *>(lower_pattern.data());
-        std::string lower_file =
-            tolower(file_contents_substr.substr(0, 4096 + pattern.length()));
-        char *lower_file_ptr = const_cast<char *>(lower_file.data());
-        char *cur_lower_file = lower_file_ptr;
+        std::string lower_pattern;
+        lower_pattern.resize(pattern.length());
+        tolower(pattern.data(), pattern.data() + pattern.length(),
+                lower_pattern.data());
+        std::string approx_lower_pattern;
+        approx_lower_pattern.resize(pattern.length());
+        approx_tolower(pattern.data(), pattern.data() + pattern.length(),
+                       approx_lower_pattern.data());
+        const char *lower_pattern_ptr = lower_pattern.data();
+        const char *approx_lower_pattern_ptr = approx_lower_pattern.data();
+
+        const char *file_contents_ptr = file_contents.data() + beginning_offset;
+
+        std::string approx_lower_file_buf;
+        approx_lower_file_buf.resize(4096 + pattern.length());
+        approx_tolower(file_contents_substr.substr(0, 4096 + pattern.length()),
+                       approx_lower_file_buf.data());
+        char *approx_lower_file_ptr =
+            const_cast<char *>(approx_lower_file_buf.data());
+        char *cur_approx_lower_file_ptr = approx_lower_file_ptr;
+
+        std::string lower_file_buf;
+        lower_file_buf.resize(4096 + pattern.length());
+        char *lower_file_ptr = const_cast<char *>(lower_file_buf.data());
+
+        while (true) {
+            if (ending_offset - beginning_offset < 4096 + pattern.length()) {
+                break;
+            }
+            for (size_t iters = 0; iters < 4096; ++iters) {
+                if (memcmp(cur_approx_lower_file_ptr, approx_lower_pattern_ptr,
+                           pattern.length()) == 0) {
+                    tolower(file_contents_ptr,
+                            file_contents_ptr + pattern.length(),
+                            lower_file_ptr);
+                    if (memcmp(lower_file_ptr, lower_pattern_ptr,
+                               pattern.length()) == 0) {
+                        return beginning_offset;
+                    }
+                }
+                ++beginning_offset;
+                ++cur_approx_lower_file_ptr;
+                ++file_contents_ptr;
+            }
+            std::copy(cur_approx_lower_file_ptr,
+                      cur_approx_lower_file_ptr + pattern.length(),
+                      approx_lower_file_ptr);
+            cur_approx_lower_file_ptr = approx_lower_file_ptr;
+            approx_tolower(file_contents_ptr + pattern.length(),
+                           file_contents_ptr + pattern.length() + 4096,
+                           approx_lower_file_ptr + pattern.length());
+        }
+
+        // handle stragglers
+        tolower(file_contents_ptr,
+                file_contents_ptr + (ending_offset - beginning_offset),
+                lower_file_ptr);
         while (beginning_offset < ending_offset) {
-            if (memcmp(cur_lower_file, lower_pattern_ptr, pattern.length()) ==
+            if (memcmp(lower_file_ptr, lower_pattern_ptr, pattern.length()) ==
                 0) {
                 return beginning_offset;
             }
             ++beginning_offset;
-            ++cur_lower_file;
-            if (cur_lower_file - lower_file_ptr == 4096) {
-                std::copy(cur_lower_file, cur_lower_file + pattern.length(),
-                          lower_file_ptr);
-                cur_lower_file = lower_file_ptr;
-                if (file_contents_substr.length() >= 4096 + pattern.length()) {
-                    tolowerN<4096>(file_contents_substr.data() +
-                                       pattern.length(),
-                                   cur_lower_file + pattern.length());
-                } else {
-                    std::string_view file_contents_substr_substr =
-                        file_contents_substr.substr(pattern.length(), 4096);
-                    std::transform(
-                        file_contents_substr_substr.begin(),
-                        file_contents_substr_substr.end(),
-                        cur_lower_file + pattern.length(),
-                        [](unsigned char c) { return std::tolower(c); });
-                }
-            }
+            ++lower_file_ptr;
         }
+
         return ending_offset;
     } else {
         size_t pos = file_contents_substr.find(pattern);
@@ -101,19 +129,11 @@ size_t basic_search_first(std::string_view file_contents,
 size_t basic_search_last(std::string_view file_contents,
                          std::string_view pattern, size_t beginning_offset,
                          size_t ending_offset, bool caseless /* = false */) {
-    // fprintf(stderr, "left byte offset %zu\n", beginning_offset);
-    // fprintf(stderr, "right byte offset %zu\n", ending_offset);
-    // fprintf(stderr, "content length %zu\n", file_contents.length());
-
     size_t result = file_contents.rfind(pattern, ending_offset - 1);
     if (result == std::string::npos || result < beginning_offset ||
         result >= ending_offset) {
-        // fprintf(stderr, "not found setting ending_offset %zu\n",
-        // ending_offset);
         result = ending_offset;
     }
-
-    // fprintf(stderr, "returning result %zu\n", result);
 
     return result;
 }

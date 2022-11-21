@@ -20,16 +20,6 @@ enum KeyType {
     OTHER,
 };
 
-// static std::string to_payload(uint16_t val) {
-//     std::string to_return;
-
-//     to_return.resize(2);
-//     to_return[0] = (char)(val & 0xFF);
-//     to_return[1] = (char)(val >> 8);
-
-//     return to_return;
-// }
-
 struct InputThread {
     std::mutex *nc_mutex;
     Channel<Command> *chan;
@@ -60,6 +50,11 @@ struct InputThread {
     }
 
     void start() {
+        /* chan->push({Command::TOGGLE_CASELESS, "-I"}); */
+        /* chan->push({Command::SEARCH_START, "/info"}); */
+        /* chan->push({Command::SEARCH_EXEC}); */
+        /* chan->push({Command::QUIT}); */
+        /* return; */
         while (true) {
             int ch = poll_and_getch();
             switch (ch) {

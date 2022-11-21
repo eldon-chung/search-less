@@ -11,14 +11,6 @@
 #include "Worker.h"
 #include "search.h"
 
-// static uint16_t from_payload(const std::string &payload) {
-//     assert(payload.size() == 2);
-//     uint16_t first_half = (uint16_t)payload[0];
-//     first_half |= (uint16_t)payload[1] << 8;
-
-//     return first_half;
-// }
-
 int main(int argc, char **argv) {
     Channel<Command> chan;
     Channel<std::function<void(void)>> task_chan;
@@ -60,8 +52,6 @@ int main(int argc, char **argv) {
     // schedule a line offset computation
     task_chan.push(std::move(read_line_offsets_tasks));
 
-    // View::DisplayableLineIt cursor =
-    //     view.get_line_at(model.get_line_at_byte_offset(0));
     view.display_page_at({});
     view.display_status();
 
@@ -81,8 +71,6 @@ int main(int argc, char **argv) {
     while (true) {
         Command command = chan.pop().value();
 
-        fprintf(stderr, "command str %s, type %d\n",
-                command.payload_str.c_str(), command.type);
         switch (command.type) {
         case Command::INVALID:
             view.display_status("Invalid key pressed: " + command.payload_str);
@@ -191,21 +179,11 @@ int main(int argc, char **argv) {
                 contents, search_pattern, right_bound, curr_line_end,
                 caseless_mode != CaselessSearchMode::SENSITIVE);
 
-            // fprintf(stderr, "first_match %zu\n", first_match);
-            // if (first_match == curr_line_end ||
-            //     first_match == std::string::npos) {
-            //     // this needs to change depending on whether there was
-            //     // already a search being done
-            //     view.display_status("Pattern not found");
-            //     break;
-            // }
-
             // dont bother scrolling up if we know what offset to start
             // from view.scroll_down();
             size_t last_match = basic_search_last(
                 contents, search_pattern, left_bound, right_bound,
                 caseless_mode != CaselessSearchMode::SENSITIVE);
-            // fprintf(stderr, "last_match %zu\n", last_match);
 
             if (last_match == right_bound && first_match != curr_line_end) {
                 // if there isnt another instance behind us, but there is one
@@ -218,12 +196,12 @@ int main(int argc, char **argv) {
                 view.move_to_byte_offset(last_match);
                 auto result_offsets = basic_search_all(
                     model.get_contents(), search_pattern,
-                    view.get_starting_offset(), view.get_ending_offset());
+                    view.get_starting_offset(), view.get_ending_offset(),
+                    caseless_mode != CaselessSearchMode::SENSITIVE);
                 std::vector<View::Highlights> highlight_list;
                 highlight_list.reserve(result_offsets.size());
                 for (size_t offset : result_offsets) {
                     highlight_list.push_back({offset, search_pattern.length()});
-                    // fprintf(stderr, "global offset %zu\n", offset);
                 }
                 view.display_page_at(highlight_list);
                 command_str_buffer = ":";
@@ -235,9 +213,6 @@ int main(int argc, char **argv) {
                                      // definitely called
 
             command_str_buffer = command.payload_str;
-            // fprintf(stderr, "search-next executing on [%s]\n",
-            // command_str_buffer.c_str());
-
             if (view.begin() == view.end()) {
                 break;
             }
@@ -275,12 +250,12 @@ int main(int argc, char **argv) {
                 view.move_to_byte_offset(first_match);
                 auto result_offsets = basic_search_all(
                     model.get_contents(), search_pattern,
-                    view.get_starting_offset(), view.get_ending_offset());
+                    view.get_starting_offset(), view.get_ending_offset(),
+                    caseless_mode != CaselessSearchMode::SENSITIVE);
                 std::vector<View::Highlights> highlight_list;
                 highlight_list.reserve(result_offsets.size());
                 for (size_t offset : result_offsets) {
                     highlight_list.push_back({offset, search_pattern.length()});
-                    // fprintf(stderr, "global offset %zu\n", offset);
                 }
                 view.display_page_at(highlight_list);
                 command_str_buffer = ":";
@@ -289,9 +264,6 @@ int main(int argc, char **argv) {
             break;
         }
         case Command::SEARCH_EXEC: {
-            // fprintf(stderr, "search executing on [%s]\n",
-            // command_str_buffer.c_str());
-
             if (view.begin() == view.end()) {
                 break;
             }
@@ -317,12 +289,12 @@ int main(int argc, char **argv) {
                 view.move_to_byte_offset(first_match);
                 auto result_offsets = basic_search_all(
                     model.get_contents(), search_pattern,
-                    view.get_starting_offset(), view.get_ending_offset());
+                    view.get_starting_offset(), view.get_ending_offset(),
+                    caseless_mode != CaselessSearchMode::SENSITIVE);
                 std::vector<View::Highlights> highlight_list;
                 highlight_list.reserve(result_offsets.size());
                 for (size_t offset : result_offsets) {
                     highlight_list.push_back({offset, search_pattern.length()});
-                    fprintf(stderr, "global offset %zu\n", offset);
                 }
                 view.display_page_at(highlight_list);
                 command_str_buffer = ":";
@@ -331,10 +303,7 @@ int main(int argc, char **argv) {
             break;
         }
         case Command::BUFFER_CURS_POS: {
-            // command_cursor_pos = from_payload(command.payload_str);
             command_cursor_pos = (uint16_t)command.payload_nums.front();
-            // fprintf(stderr, "printing command buffer: %s\n",
-            //         command_str_buffer.c_str());
             view.display_command(command_str_buffer, command_cursor_pos);
             break;
         }

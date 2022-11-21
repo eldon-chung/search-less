@@ -96,8 +96,6 @@ class View {
         DisplayableLineIt &operator--() {
             // to tell if you've rewinched we should also check if
             if (relative_line_offset() >= m_screen_width) {
-                // fprintf(stderr, "staying on same model line; relative %zu\n",
-                //         relative_line_offset());
                 m_global_offset -= m_screen_width;
             } else if (relative_line_offset() == 0) {
                 // if not you need to move back by 1 line and start figuring
