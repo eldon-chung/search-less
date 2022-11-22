@@ -22,6 +22,8 @@ struct Command {
         TOGGLE_CONDITIONALLY_CASELESS,
         BUFFER_CURS_POS,
         UPDATE_LINE_IDXS,
+        SEARCH_CLEAR,
+        TOGGLE_HIGHLIGHTING,
     };
     Type type = INVALID;
     std::string payload_str = "";

@@ -170,6 +170,7 @@ class View {
         raw();
         curs_set(0);
         keypad(stdscr, TRUE);
+        timeout(0);
 
         // Get the screen height and width
         int height, width;
@@ -321,12 +322,12 @@ class View {
                          (int)length, WA_STANDOUT, 0, NULL);
             };
 
+        fprintf(stderr, "display page acquiring lock\n");
         std::scoped_lock lock(*nc_mutex);
         int height, width;
         getmaxyx(m_main_window_ptr, height, width);
 
         werase(m_main_window_ptr);
-        size_t highlight_idx = 0;
 
         auto page_lines_it = m_cursor;
         for (int display_row = 0; display_row < height;) {
@@ -352,7 +353,10 @@ class View {
         page_lines_it = m_cursor;
         wstandend(m_main_window_ptr);
 
-        for (int display_row = 0; display_row < height; display_row++) {
+        size_t highlight_idx = 0;
+        for (int display_row = 0;
+             highlight_idx < highlight_list.size() && display_row < height;
+             display_row++) {
             if (page_lines_it != end()) {
                 while (highlight_idx < highlight_list.size() &&
                        highlight_list[highlight_idx].offset >=
@@ -372,6 +376,7 @@ class View {
         }
 
         wrefresh(m_main_window_ptr);
+        fprintf(stderr, "display page release lock\n");
     }
 
     // void clear_main_highlights() {
@@ -402,11 +407,13 @@ class View {
     }
 
     void display_status(std::string_view status) {
+        fprintf(stderr, "status page acquiring lock\n");
         std::scoped_lock lock(*nc_mutex);
         werase(m_command_window_ptr);
         wattrset(m_command_window_ptr, WA_STANDOUT);
         mvwaddnstr(m_command_window_ptr, 0, 0, status.data(), status.length());
         wrefresh(m_command_window_ptr);
+        fprintf(stderr, "status page released lock\n");
     }
 
     void display_status() {

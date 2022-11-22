@@ -20,11 +20,22 @@ void Main::update_screen_highlight_offsets() {
     }
 }
 
+void Main::display_page() {
+    if (m_highlight_active) {
+        update_screen_highlight_offsets();
+        m_view.display_page_at(m_highlight_offsets);
+    } else {
+        m_view.display_page_at({});
+    }
+}
+
 void Main::run() {
 
     while (true) {
+        fprintf(stderr, "main: waiting for command: \n");
         Command command = m_chan.pop().value();
-
+        fprintf(stderr, "main: command type: %d, payload %s \n", command.type,
+                command.payload_str.c_str());
         switch (command.type) {
         case Command::INVALID:
             m_view.display_status("Invalid key pressed: " +
@@ -32,29 +43,26 @@ void Main::run() {
             break;
         case Command::RESIZE:
             m_view.handle_resize();
-            update_screen_highlight_offsets();
-            m_view.display_page_at(m_highlight_offsets);
+            display_page();
             m_view.display_status("handle resize called");
             break;
         case Command::QUIT:
+            fprintf(stderr, "main: closing \n");
             m_chan.close();
             m_task_chan.close();
             m_file_task_stop_source.request_stop();
             break;
         case Command::VIEW_DOWN:
             m_view.scroll_down();
-            update_screen_highlight_offsets();
-            m_view.display_page_at(m_highlight_offsets);
+            display_page();
             break;
         case Command::VIEW_UP:
             m_view.scroll_up();
-            update_screen_highlight_offsets();
-            m_view.display_page_at(m_highlight_offsets);
+            display_page();
             break;
         case Command::VIEW_BOF:
             m_view.move_to_top();
-            update_screen_highlight_offsets();
-            m_view.display_page_at(m_highlight_offsets);
+            display_page();
             break;
         case Command::VIEW_EOF:
             if (m_model.has_changed()) {
@@ -74,8 +82,7 @@ void Main::run() {
                 m_task_chan.push(read_line_offsets_tasks);
             }
             m_view.move_to_end();
-            update_screen_highlight_offsets();
-            m_view.display_page_at(m_highlight_offsets);
+            display_page();
             break;
         case Command::DISPLAY_COMMAND: {
             m_view.display_command(command.payload_str);
@@ -110,12 +117,10 @@ void Main::run() {
         }
         case Command::SEARCH_START: {
             m_command_str_buffer = command.payload_str;
-            // we expect the next incoming command to trigger the redraw
+            m_view.display_command(m_command_str_buffer);
             break;
         }
         case Command::SEARCH_QUIT: {
-            // this might actually happen in the middle
-            // of a valid search, do not change m_display_mode
             m_command_str_buffer = ":";
             m_view.display_command(m_command_str_buffer);
             break;
@@ -161,7 +166,7 @@ void Main::run() {
         case Command::SEARCH_NEXT: { // assume for now that search_exec was
                                      // definitely called
 
-            m_highlight_mode = HighlightMode::ACTIVE;
+            m_highlight_active = true;
             if (m_view.begin() == m_view.end()) {
                 break;
             }
@@ -173,14 +178,10 @@ void Main::run() {
             size_t curr_line_end = m_view.cursor().get_ending_offset();
             size_t right_bound = contents.size();
 
-            // if it doesnt exist on the current line, don't
-            // it means it doesnt exist.
             size_t curr_line_match = basic_search_first(
                 contents, m_last_search_pattern, left_bound, curr_line_end,
                 m_caseless_mode != CaselessSearchMode::SENSITIVE);
 
-            // dont bother scrolling down if we know what offset to start
-            // from view.scroll_down();
             size_t next_match = basic_search_first(
                 contents, m_last_search_pattern, curr_line_end, right_bound,
                 m_caseless_mode != CaselessSearchMode::SENSITIVE);
@@ -199,7 +200,7 @@ void Main::run() {
             break;
         }
         case Command::SEARCH_EXEC: {
-            m_highlight_mode = HighlightMode::ACTIVE;
+            m_highlight_active = true;
 
             if (m_view.begin() == m_view.end()) {
                 break;
@@ -207,6 +208,7 @@ void Main::run() {
 
             std::string_view contents = m_model.get_contents();
 
+            // update the search pattern to m_command_str_buffer
             m_last_search_pattern = std::string{
                 m_command_str_buffer.begin() + 1, m_command_str_buffer.end()};
             size_t left_bound = m_view.get_starting_offset();
@@ -240,7 +242,23 @@ void Main::run() {
         }
         case Command::UPDATE_LINE_IDXS: {
             m_model.update_line_idxs(command.payload_nums);
-            m_view.display_status("computed line idxs");
+            break;
+        }
+        case Command::TOGGLE_HIGHLIGHTING: {
+            fprintf(stderr, "main() got ESC-U\n");
+            if (m_last_search_pattern.empty()) {
+                m_view.display_status("No previous search pattern.");
+                break;
+            }
+
+            m_highlight_active = !m_highlight_active;
+            display_page();
+            break;
+        }
+        case Command::SEARCH_CLEAR: {
+            m_last_search_pattern.clear();
+            m_highlight_active = false;
+            display_page();
             break;
         }
         }

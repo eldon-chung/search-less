@@ -18,10 +18,14 @@ template <typename T> struct Channel {
 
     void push(T v) {
         {
+            fprintf(stderr, "channel push: acquiring mut\n");
             std::scoped_lock lock(mut);
+            fprintf(stderr, "channel push: acquired mut\n");
             que.push(std::move(v));
+            fprintf(stderr, "channel push: pushed value\n");
         }
         cond.notify_one();
+        fprintf(stderr, "channel push: notified\n");
     }
 
     void push_signal(T v) {
@@ -34,20 +38,31 @@ template <typename T> struct Channel {
     }
 
     std::optional<T> pop() {
+        fprintf(stderr, "channel pop: acquiring mut\n");
         std::unique_lock lock(mut);
+        fprintf(stderr, "channel pop: mut acquired. cond.waiting\n");
         cond.wait(lock, [this]() {
             return !que.empty() || sig_que != nullptr || closed;
         });
+        fprintf(stderr, "channel pop: done waiting, checking sig_que\n");
+
         if (sig_que != nullptr) {
             T val = std::move(*sig_que);
             sig_que = nullptr;
             return val;
         }
+
+        fprintf(stderr, "channel pop: checking if queue is empty\n");
+
         if (!que.empty()) {
             T top = std::move(que.front());
             que.pop();
+            fprintf(stderr, "channel pop: popped from queue\n");
+
             return top;
         }
+
+        fprintf(stderr, "channel pop: queue is empty\n");
 
         // queue is empty, so channel is closed
         return std::nullopt;

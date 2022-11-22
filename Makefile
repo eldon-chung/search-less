@@ -18,6 +18,7 @@ CXXWERROR += -Wconversion
 CXXWERROR += -Wtautological-constant-out-of-range-compare
 CXXWERROR += -Wno-unused-but-set-variable
 CXXFLAGS := -g -std=c++20 -Isrc -ftime-trace -fno-omit-frame-pointer
+CXXFLAGS += -fsanitize=thread
 CXXFLAGS += $(CXXOPT)
 CXXFLAGS += $(CXXWARNINGS)
 CXXFLAGS += $(CXXWERROR)

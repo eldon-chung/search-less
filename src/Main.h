@@ -28,11 +28,7 @@ struct Main {
     InputThread m_input;
     WorkerThread m_taskmaster;
 
-    enum class HighlightMode {
-        ACTIVE,
-        INACTIVE,
-    };
-    HighlightMode m_highlight_mode;
+    bool m_highlight_active;
 
     enum class CaselessSearchMode {
         SENSITIVE,
@@ -51,7 +47,7 @@ struct Main {
         : m_model(Model::initialize(std::move(file_de))),
           m_view(View::initialize(&m_nc_mutex, &m_model)),
           m_input(&m_nc_mutex, &m_chan), m_taskmaster(&m_task_chan),
-          m_highlight_mode(HighlightMode::ACTIVE),
+          m_highlight_active(true),
           m_caseless_mode(CaselessSearchMode::SENSITIVE) {
         register_for_sigwinch_channel(&m_chan);
 
@@ -81,4 +77,5 @@ struct Main {
 
   private:
     void update_screen_highlight_offsets();
+    void display_page();
 };
