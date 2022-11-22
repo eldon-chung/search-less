@@ -26,7 +26,7 @@ template <typename T> struct Channel {
 
     void push_signal(T v) {
         thread_local static T val;
-        if (sig_que == &val)
+        if (sig_que != nullptr)
             return;
         val = std::move(v);
         sig_que = &val;
