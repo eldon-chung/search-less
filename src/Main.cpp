@@ -1,5 +1,25 @@
 #include "Main.h"
 
+// is this good? the member fields now sort of behave like
+// "scoped globals" in this way. perhaps we should make
+// this a static method that takes in params
+void Main::update_screen_highlight_offsets() {
+    // search all of the occurences of the pattern
+    // that are visible on the screen right now.
+    auto result_offsets = basic_search_all(
+        m_model.get_contents(), m_last_search_pattern,
+        m_view.get_starting_offset(), m_view.get_ending_offset(),
+        m_caseless_mode != CaselessSearchMode::SENSITIVE);
+
+    // clear our highlight offsets
+    m_highlight_offsets.clear();
+    m_highlight_offsets.reserve(result_offsets.size());
+
+    for (size_t offset : result_offsets) {
+        m_highlight_offsets.push_back({offset, m_last_search_pattern.length()});
+    }
+}
+
 void Main::run() {
 
     while (true) {
@@ -12,7 +32,8 @@ void Main::run() {
             break;
         case Command::RESIZE:
             m_view.handle_resize();
-            m_view.display_page_at({});
+            update_screen_highlight_offsets();
+            m_view.display_page_at(m_highlight_offsets);
             m_view.display_status("handle resize called");
             break;
         case Command::QUIT:
@@ -22,15 +43,18 @@ void Main::run() {
             break;
         case Command::VIEW_DOWN:
             m_view.scroll_down();
-            m_view.display_page_at({});
+            update_screen_highlight_offsets();
+            m_view.display_page_at(m_highlight_offsets);
             break;
         case Command::VIEW_UP:
             m_view.scroll_up();
-            m_view.display_page_at({});
+            update_screen_highlight_offsets();
+            m_view.display_page_at(m_highlight_offsets);
             break;
         case Command::VIEW_BOF:
             m_view.move_to_top();
-            m_view.display_page_at({});
+            update_screen_highlight_offsets();
+            m_view.display_page_at(m_highlight_offsets);
             break;
         case Command::VIEW_EOF:
             if (m_model.has_changed()) {
@@ -50,7 +74,8 @@ void Main::run() {
                 m_task_chan.push(read_line_offsets_tasks);
             }
             m_view.move_to_end();
-            m_view.display_page_at({});
+            update_screen_highlight_offsets();
+            m_view.display_page_at(m_highlight_offsets);
             break;
         case Command::DISPLAY_COMMAND: {
             m_view.display_command(command.payload_str);
@@ -98,29 +123,22 @@ void Main::run() {
         case Command::SEARCH_PREV: { // assume for now that search_exec was
                                      // definitely called
 
-            m_command_str_buffer = command.payload_str;
-
             if (m_view.begin() == m_view.end()) {
                 break;
             }
 
             std::string_view contents = m_model.get_contents();
-            std::string search_pattern{m_command_str_buffer.begin() + 1,
-                                       m_command_str_buffer.end()};
-            size_t left_bound = 0;
             size_t right_bound = m_view.get_starting_offset();
             size_t curr_line_end = m_view.cursor().get_ending_offset();
 
-            // if it doesnt exist on the current line, don't
-            // it means it doesnt exist.
+            // figure out if there is one on our current line;
             size_t first_match = basic_search_first(
-                contents, search_pattern, right_bound, curr_line_end,
+                contents, m_last_search_pattern, right_bound, curr_line_end,
                 m_caseless_mode != CaselessSearchMode::SENSITIVE);
 
-            // dont bother scrolling up if we know what offset to start
-            // from view.scroll_down();
+            // look for instances before us
             size_t last_match = basic_search_last(
-                contents, search_pattern, left_bound, right_bound,
+                contents, m_last_search_pattern, 0, right_bound,
                 m_caseless_mode != CaselessSearchMode::SENSITIVE);
 
             if (last_match == right_bound && first_match != curr_line_end) {
@@ -128,20 +146,13 @@ void Main::run() {
                 // one instance on our line
                 m_view.display_status("(TOP)");
             } else if (last_match == right_bound) {
-                // there just isnt another instance
+                update_screen_highlight_offsets();
+                m_view.display_page_at(m_highlight_offsets);
                 m_view.display_status("Pattern not found");
             } else {
                 m_view.move_to_byte_offset(last_match);
-                auto result_offsets = basic_search_all(
-                    m_model.get_contents(), search_pattern,
-                    m_view.get_starting_offset(), m_view.get_ending_offset(),
-                    m_caseless_mode != CaselessSearchMode::SENSITIVE);
-                std::vector<View::Highlights> highlight_list;
-                highlight_list.reserve(result_offsets.size());
-                for (size_t offset : result_offsets) {
-                    highlight_list.push_back({offset, search_pattern.length()});
-                }
-                m_view.display_page_at(highlight_list);
+                update_screen_highlight_offsets();
+                m_view.display_page_at(m_highlight_offsets);
                 m_command_str_buffer = ":";
                 m_view.display_command(":");
             }
@@ -149,53 +160,39 @@ void Main::run() {
         }
         case Command::SEARCH_NEXT: { // assume for now that search_exec was
                                      // definitely called
+
             m_highlight_mode = HighlightMode::ACTIVE;
-            m_command_str_buffer = command.payload_str;
             if (m_view.begin() == m_view.end()) {
                 break;
             }
 
+            // use the most recent search pattern stored in
+            // m_last_search_pattern
             std::string_view contents = m_model.get_contents();
-            std::string search_pattern{m_command_str_buffer.begin() + 1,
-                                       m_command_str_buffer.end()};
             size_t left_bound = m_view.get_starting_offset();
             size_t curr_line_end = m_view.cursor().get_ending_offset();
             size_t right_bound = contents.size();
 
             // if it doesnt exist on the current line, don't
             // it means it doesnt exist.
-            size_t first_match = basic_search_first(
-                contents, search_pattern, left_bound, curr_line_end,
+            size_t curr_line_match = basic_search_first(
+                contents, m_last_search_pattern, left_bound, curr_line_end,
                 m_caseless_mode != CaselessSearchMode::SENSITIVE);
-            if (first_match == curr_line_end ||
-                first_match == std::string::npos) {
-                // this needs to change depending on whether there was
-                // already a search being done
-                m_view.display_status("Pattern not found");
-                break;
-            }
 
             // dont bother scrolling down if we know what offset to start
             // from view.scroll_down();
-            first_match = basic_search_first(
-                contents, search_pattern, curr_line_end, right_bound,
+            size_t next_match = basic_search_first(
+                contents, m_last_search_pattern, curr_line_end, right_bound,
                 m_caseless_mode != CaselessSearchMode::SENSITIVE);
 
-            if (first_match == m_model.length() ||
-                first_match == std::string::npos) {
+            if (next_match == right_bound && curr_line_match != curr_line_end) {
+                update_screen_highlight_offsets();
+                m_view.display_page_at(m_highlight_offsets);
                 m_view.display_status("(END)");
             } else {
-                m_view.move_to_byte_offset(first_match);
-                auto result_offsets = basic_search_all(
-                    m_model.get_contents(), search_pattern,
-                    m_view.get_starting_offset(), m_view.get_ending_offset(),
-                    m_caseless_mode != CaselessSearchMode::SENSITIVE);
-                std::vector<View::Highlights> highlight_list;
-                highlight_list.reserve(result_offsets.size());
-                for (size_t offset : result_offsets) {
-                    highlight_list.push_back({offset, search_pattern.length()});
-                }
-                m_view.display_page_at(highlight_list);
+                m_view.move_to_byte_offset(next_match);
+                update_screen_highlight_offsets();
+                m_view.display_page_at(m_highlight_offsets);
                 m_command_str_buffer = ":";
                 m_view.display_command(":");
             }
@@ -209,13 +206,14 @@ void Main::run() {
             }
 
             std::string_view contents = m_model.get_contents();
-            std::string search_pattern{m_command_str_buffer.begin() + 1,
-                                       m_command_str_buffer.end()};
+
+            m_last_search_pattern = std::string{
+                m_command_str_buffer.begin() + 1, m_command_str_buffer.end()};
             size_t left_bound = m_view.get_starting_offset();
             size_t right_bound = contents.size();
 
             size_t first_match = basic_search_first(
-                contents, search_pattern, left_bound, right_bound,
+                contents, m_last_search_pattern, left_bound, right_bound,
                 m_caseless_mode != CaselessSearchMode::SENSITIVE);
 
             if (first_match == m_model.length() ||
@@ -223,20 +221,13 @@ void Main::run() {
                 // this needs to change depending on whether there was
                 // already a search being done
                 m_view.display_status("Pattern not found");
-                m_view.display_page_at({});
+                update_screen_highlight_offsets();
+                m_view.display_page_at(m_highlight_offsets);
                 break;
             } else {
                 m_view.move_to_byte_offset(first_match);
-                auto result_offsets = basic_search_all(
-                    m_model.get_contents(), search_pattern,
-                    m_view.get_starting_offset(), m_view.get_ending_offset(),
-                    m_caseless_mode != CaselessSearchMode::SENSITIVE);
-                std::vector<View::Highlights> highlight_list;
-                highlight_list.reserve(result_offsets.size());
-                for (size_t offset : result_offsets) {
-                    highlight_list.push_back({offset, search_pattern.length()});
-                }
-                m_view.display_page_at(highlight_list);
+                update_screen_highlight_offsets();
+                m_view.display_page_at(m_highlight_offsets);
                 m_command_str_buffer = ":";
                 m_view.display_command(":");
             }

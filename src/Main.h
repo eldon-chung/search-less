@@ -44,7 +44,8 @@ struct Main {
     std::string m_command_str_buffer;
     uint16_t m_command_cursor_pos;
 
-    std::vector<size_t> m_highlight_offsets;
+    std::vector<View::Highlights> m_highlight_offsets;
+    std::string m_last_search_pattern;
 
     Main(std::filesystem::directory_entry file_de)
         : m_model(Model::initialize(std::move(file_de))),
@@ -77,4 +78,7 @@ struct Main {
     Main &operator=(Main &&other) = delete;
 
     void run();
+
+  private:
+    void update_screen_highlight_offsets();
 };
