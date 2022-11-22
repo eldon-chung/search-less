@@ -8,7 +8,7 @@ void tolower(const char *s, const char *end, char *out) {
 }
 
 void approx_tolower(const char *s, const char *end, char *out) {
-    std::transform(s, end, out, [](char c) { return (c & 0x1f) | 0x40; });
+    std::transform(s, end, out, [](char c) { return c & 0x1f; });
 }
 
 void tolower(std::string_view in, char *out) {
