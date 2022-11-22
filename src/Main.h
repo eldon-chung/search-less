@@ -28,6 +28,12 @@ struct Main {
     InputThread m_input;
     WorkerThread m_taskmaster;
 
+    enum class HighlightMode {
+        ACTIVE,
+        INACTIVE,
+    };
+    HighlightMode m_highlight_mode;
+
     enum class CaselessSearchMode {
         SENSITIVE,
         CONDITIONALLY_SENSITIVE,
@@ -38,10 +44,13 @@ struct Main {
     std::string m_command_str_buffer;
     uint16_t m_command_cursor_pos;
 
+    std::vector<size_t> m_highlight_offsets;
+
     Main(std::filesystem::directory_entry file_de)
         : m_model(Model::initialize(std::move(file_de))),
           m_view(View::initialize(&m_nc_mutex, &m_model)),
           m_input(&m_nc_mutex, &m_chan), m_taskmaster(&m_task_chan),
+          m_highlight_mode(HighlightMode::ACTIVE),
           m_caseless_mode(CaselessSearchMode::SENSITIVE) {
         register_for_sigwinch_channel(&m_chan);
 

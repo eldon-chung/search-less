@@ -89,6 +89,8 @@ void Main::run() {
             break;
         }
         case Command::SEARCH_QUIT: {
+            // this might actually happen in the middle
+            // of a valid search, do not change m_display_mode
             m_command_str_buffer = ":";
             m_view.display_command(m_command_str_buffer);
             break;
@@ -147,7 +149,7 @@ void Main::run() {
         }
         case Command::SEARCH_NEXT: { // assume for now that search_exec was
                                      // definitely called
-
+            m_highlight_mode = HighlightMode::ACTIVE;
             m_command_str_buffer = command.payload_str;
             if (m_view.begin() == m_view.end()) {
                 break;
@@ -200,6 +202,8 @@ void Main::run() {
             break;
         }
         case Command::SEARCH_EXEC: {
+            m_highlight_mode = HighlightMode::ACTIVE;
+
             if (m_view.begin() == m_view.end()) {
                 break;
             }
