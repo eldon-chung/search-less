@@ -32,10 +32,7 @@ void Main::display_page() {
 void Main::run() {
 
     while (true) {
-        fprintf(stderr, "main: waiting for command: \n");
         Command command = m_chan.pop().value();
-        fprintf(stderr, "main: command type: %d, payload %s \n", command.type,
-                command.payload_str.c_str());
         switch (command.type) {
         case Command::INVALID:
             m_view.display_status("Invalid key pressed: " +
@@ -47,7 +44,6 @@ void Main::run() {
             m_view.display_status("handle resize called");
             break;
         case Command::QUIT:
-            fprintf(stderr, "main: closing \n");
             m_chan.close();
             m_task_chan.close();
             m_file_task_stop_source.request_stop();
@@ -128,7 +124,13 @@ void Main::run() {
         case Command::SEARCH_PREV: { // assume for now that search_exec was
                                      // definitely called
 
+            m_highlight_active = true;
             if (m_view.begin() == m_view.end()) {
+                break;
+            }
+
+            // for now if search pattern is empty, we just break
+            if (m_last_search_pattern.empty()) {
                 break;
             }
 
@@ -151,13 +153,11 @@ void Main::run() {
                 // one instance on our line
                 m_view.display_status("(TOP)");
             } else if (last_match == right_bound) {
-                update_screen_highlight_offsets();
-                m_view.display_page_at(m_highlight_offsets);
+                display_page();
                 m_view.display_status("Pattern not found");
             } else {
                 m_view.move_to_byte_offset(last_match);
-                update_screen_highlight_offsets();
-                m_view.display_page_at(m_highlight_offsets);
+                display_page();
                 m_command_str_buffer = ":";
                 m_view.display_command(":");
             }
@@ -168,6 +168,11 @@ void Main::run() {
 
             m_highlight_active = true;
             if (m_view.begin() == m_view.end()) {
+                break;
+            }
+
+            // for now if search pattern is empty, we just break
+            if (m_last_search_pattern.empty()) {
                 break;
             }
 
@@ -187,13 +192,11 @@ void Main::run() {
                 m_caseless_mode != CaselessSearchMode::SENSITIVE);
 
             if (next_match == right_bound && curr_line_match != curr_line_end) {
-                update_screen_highlight_offsets();
-                m_view.display_page_at(m_highlight_offsets);
+                display_page();
                 m_view.display_status("(END)");
             } else {
                 m_view.move_to_byte_offset(next_match);
-                update_screen_highlight_offsets();
-                m_view.display_page_at(m_highlight_offsets);
+                display_page();
                 m_command_str_buffer = ":";
                 m_view.display_command(":");
             }
@@ -223,13 +226,11 @@ void Main::run() {
                 // this needs to change depending on whether there was
                 // already a search being done
                 m_view.display_status("Pattern not found");
-                update_screen_highlight_offsets();
-                m_view.display_page_at(m_highlight_offsets);
+                display_page();
                 break;
             } else {
                 m_view.move_to_byte_offset(first_match);
-                update_screen_highlight_offsets();
-                m_view.display_page_at(m_highlight_offsets);
+                display_page();
                 m_command_str_buffer = ":";
                 m_view.display_command(":");
             }
@@ -245,19 +246,21 @@ void Main::run() {
             break;
         }
         case Command::TOGGLE_HIGHLIGHTING: {
-            fprintf(stderr, "main() got ESC-U\n");
             if (m_last_search_pattern.empty()) {
                 m_view.display_status("No previous search pattern.");
                 break;
             }
 
             m_highlight_active = !m_highlight_active;
+
             display_page();
             break;
         }
         case Command::SEARCH_CLEAR: {
             m_last_search_pattern.clear();
             m_highlight_active = false;
+            m_view.display_status("Search cleared.");
+
             display_page();
             break;
         }
@@ -269,14 +272,6 @@ void Main::run() {
 }
 
 int main(int argc, char **argv) {
-    // Channel<Command> chan;
-    // Channel<std::function<void(void)>> task_chan;
-
-    // std::stop_source file_task_stop_source;
-    // std::promise<void> file_task_promise;
-
-    // register_for_sigwinch_channel(&chan);
-
     if (argc < 2) {
         fprintf(stderr, "missing filename.\n");
         exit(1);

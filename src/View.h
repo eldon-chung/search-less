@@ -167,10 +167,11 @@ class View {
         start_color();
         use_default_colors();
         noecho();
+        // notimeout(stdscr, TRUE);
         raw();
         curs_set(0);
         keypad(stdscr, TRUE);
-        timeout(0);
+        timeout(1);
 
         // Get the screen height and width
         int height, width;
@@ -322,7 +323,6 @@ class View {
                          (int)length, WA_STANDOUT, 0, NULL);
             };
 
-        fprintf(stderr, "display page acquiring lock\n");
         std::scoped_lock lock(*nc_mutex);
         int height, width;
         getmaxyx(m_main_window_ptr, height, width);
@@ -376,7 +376,6 @@ class View {
         }
 
         wrefresh(m_main_window_ptr);
-        fprintf(stderr, "display page release lock\n");
     }
 
     // void clear_main_highlights() {
@@ -407,13 +406,11 @@ class View {
     }
 
     void display_status(std::string_view status) {
-        fprintf(stderr, "status page acquiring lock\n");
         std::scoped_lock lock(*nc_mutex);
         werase(m_command_window_ptr);
         wattrset(m_command_window_ptr, WA_STANDOUT);
         mvwaddnstr(m_command_window_ptr, 0, 0, status.data(), status.length());
         wrefresh(m_command_window_ptr);
-        fprintf(stderr, "status page released lock\n");
     }
 
     void display_status() {

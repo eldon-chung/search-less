@@ -10,6 +10,10 @@
 #include <signal.h>
 #include <thread>
 
+#include <sys/ioctl.h>
+#include <sys/select.h>
+#include <termios.h>
+
 #include "Channel.h"
 #include "Command.h"
 
@@ -49,11 +53,15 @@ struct InputThread {
     }
 
     int poll_and_getch() {
-        fprintf(stderr, "input polling\n");
         poll(pollfds, 1, -1);
-        fprintf(stderr, "input acquiring lock\n");
         std::scoped_lock lock(*nc_mutex);
-        fprintf(stderr, "input getting char\n");
+        return getch();
+    }
+
+    // blocking getch. only do this if you expect the next input to come in
+    // soon.
+    int force_getch() {
+        std::scoped_lock lock(*nc_mutex);
         return getch();
     }
 
@@ -111,14 +119,8 @@ struct InputThread {
     }
 
     void start() {
-        /* chan->push({Command::TOGGLE_CASELESS, "-I"}); */
-        /* chan->push({Command::SEARCH_START, "/info"}); */
-        /* chan->push({Command::SEARCH_EXEC}); */
-        /* chan->push({Command::QUIT}); */
-        /* return; */
         while (true) {
             int ch = poll_and_getch();
-            fprintf(stderr, "returned from poll_and_getch [%s]\n", keyname(ch));
 
             switch (ch) {
             case 'q':
@@ -126,9 +128,7 @@ struct InputThread {
                 return; // Kill input thread
             case 'j':
             case KEY_DOWN:
-                fprintf(stderr, "got an KEY_DOWN\n");
                 chan->push({Command::VIEW_DOWN});
-                fprintf(stderr, "got pushed KEY_DOWN into channel\n");
                 break;
             case 'k':
             case KEY_UP:
@@ -146,7 +146,6 @@ struct InputThread {
 
                 // start search mode in main
                 chan->push({Command::SEARCH_START, pattern_buf});
-                fprintf(stderr, "pushed into channel SEARCH START\n");
 
                 // send it cursor position 0
                 chan->push({Command::BUFFER_CURS_POS, "", {cursor_pos}});
@@ -160,21 +159,15 @@ struct InputThread {
             case 'N': // this needs to work with search history eventually;
                 chan->push({Command::SEARCH_PREV, pattern_buf});
                 break;
-            case 27: { // ESC key; note: we might need to manually set
-                int opt = poll_and_getch();
-                fprintf(stderr, "got an esc key\n");
-                chan->push({Command::DISPLAY_COMMAND, "ESC pressed: ESC-"});
-
+            case 27: {
+                int opt = force_getch();
+                // Set ESC option
                 switch (opt) {
                 case 'U':
-                    fprintf(stderr, "got ESC-U\n");
                     chan->push({Command::SEARCH_CLEAR, "ESC-U"});
-                    fprintf(stderr, "pushed into channel ESC-U\n");
                     break;
                 case 'u':
-                    fprintf(stderr, "got ESC-u\n");
                     chan->push({Command::TOGGLE_HIGHLIGHTING, "ESC-u"});
-                    fprintf(stderr, "pushed into channel ESC-u\n");
                     break;
                 default:
                     using namespace std::string_literals;
