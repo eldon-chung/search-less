@@ -167,11 +167,10 @@ class View {
         start_color();
         use_default_colors();
         noecho();
-        // notimeout(stdscr, TRUE);
         raw();
         curs_set(0);
         keypad(stdscr, TRUE);
-        timeout(1);
+        nodelay(stdscr, TRUE);
 
         // Get the screen height and width
         int height, width;

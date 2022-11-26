@@ -53,14 +53,17 @@ struct InputThread {
     }
 
     int poll_and_getch() {
-        poll(pollfds, 1, -1);
-        std::scoped_lock lock(*nc_mutex);
-        return getch();
-    }
+        {
+            // read from the getch buffer first instead of polling
+            std::scoped_lock lock(*nc_mutex);
+            int read_val = getch();
+            if (read_val != ERR) {
+                return read_val;
+            }
+        }
 
-    // blocking getch. only do this if you expect the next input to come in
-    // soon.
-    int force_getch() {
+        // if we hit this point the nc buffer was empty
+        poll(pollfds, 1, -1);
         std::scoped_lock lock(*nc_mutex);
         return getch();
     }
@@ -160,7 +163,7 @@ struct InputThread {
                 chan->push({Command::SEARCH_PREV, pattern_buf});
                 break;
             case 27: {
-                int opt = force_getch();
+                int opt = poll_and_getch();
                 // Set ESC option
                 switch (opt) {
                 case 'U':
