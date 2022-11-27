@@ -1,6 +1,7 @@
 all: my_all
 
 DEBUG := 1
+SANITIZE := $(DEBUG)
 
 CXX := clang++
 ifeq ($(DEBUG), 1)
@@ -18,7 +19,9 @@ CXXWERROR += -Wconversion
 CXXWERROR += -Wtautological-constant-out-of-range-compare
 CXXWERROR += -Wno-unused-but-set-variable
 CXXFLAGS := -g -std=c++20 -Isrc -ftime-trace -fno-omit-frame-pointer
+ifeq ($(SANITIZE), 1)
 CXXFLAGS += -fsanitize=thread
+endif
 CXXFLAGS += $(CXXOPT)
 CXXFLAGS += $(CXXWARNINGS)
 CXXFLAGS += $(CXXWERROR)
