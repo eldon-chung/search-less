@@ -94,8 +94,11 @@ struct Page {
     static Page get_page_at_byte_offset(Model const *model, size_t offset,
                                         size_t height, size_t width,
                                         bool wrap_lines) {
-        LineIt start_line{Cursor::get_cursor_at_byte_offset(model, offset),
-                          width, wrap_lines};
+        Cursor start_cursor = Cursor::get_cursor_at_byte_offset(model, offset);
+        if (wrap_lines) {
+            start_cursor = start_cursor.round_to_wrapped_line(width);
+        }
+        LineIt start_line{start_cursor, width, wrap_lines};
         // Each loop, we go down N rows from m_cursor until we reach the end. if
         // we reach the end, move m_cursor up that many line and try again. We
         // need to try again since sometimes going up a line doesn't actually
