@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <cctype>
+#include <charconv>
 #include <fcntl.h>
 #include <mutex>
 #include <ncurses.h>
@@ -68,19 +69,19 @@ struct InputThread {
         return getch();
     }
 
-    void multi_char_search() {
+    void multi_char_search(size_t num_payload) {
         while (true) {
             int key = poll_and_getch();
             switch (key) {
             case KEY_LEFT:
                 cursor_pos -= (cursor_pos > 1) ? 1 : 0;
                 chan->push({Command::SEARCH_START, pattern_buf});
-                chan->push({Command::BUFFER_CURS_POS, "", {cursor_pos}});
+                chan->push({Command::BUFFER_CURS_POS, "", {}, cursor_pos});
                 break;
             case KEY_RIGHT:
                 cursor_pos += (cursor_pos < pattern_buf.size()) ? 1 : 0;
                 chan->push({Command::SEARCH_START, pattern_buf});
-                chan->push({Command::BUFFER_CURS_POS, "", {cursor_pos}});
+                chan->push({Command::BUFFER_CURS_POS, "", {}, cursor_pos});
                 break;
             case KEY_UP:
             case KEY_DOWN:
@@ -91,7 +92,7 @@ struct InputThread {
             case KEY_BACKSPACE:
                 pattern_buf.erase(--cursor_pos, 1);
                 chan->push({Command::SEARCH_START, pattern_buf});
-                chan->push({Command::BUFFER_CURS_POS, "", {cursor_pos}});
+                chan->push({Command::BUFFER_CURS_POS, "", {}, cursor_pos});
 
                 break;
             case KEY_ENTER:
@@ -102,7 +103,7 @@ struct InputThread {
                 pattern_buf.insert(cursor_pos++, 1, (char)key);
 
                 chan->push({Command::SEARCH_START, pattern_buf});
-                chan->push({Command::BUFFER_CURS_POS, "", {cursor_pos}});
+                chan->push({Command::BUFFER_CURS_POS, "", {}, cursor_pos});
 
                 break;
             }
@@ -113,7 +114,8 @@ struct InputThread {
             }
 
             if (key == KEY_ENTER || key == '\n') {
-                chan->push({Command::SEARCH_EXEC, pattern_buf});
+                chan->push(
+                    {Command::SEARCH_EXEC, pattern_buf, {}, num_payload});
                 break;
             }
         }
@@ -122,8 +124,25 @@ struct InputThread {
     }
 
     void start() {
+        std::string num_payload_buf;
+
         while (true) {
             int ch = poll_and_getch();
+
+            size_t num_payload = 1;
+            // if any error happens during conversion, num_payload is unmodified
+            std::from_chars(num_payload_buf.data(),
+                            num_payload_buf.data() + num_payload_buf.length(),
+                            num_payload);
+
+            if ('0' <= ch && ch <= '9') {
+                using namespace std::string_literals;
+                num_payload_buf.push_back((char)ch);
+                chan->push({Command::DISPLAY_COMMAND, ":"s + num_payload_buf});
+                continue;
+            } else {
+                num_payload_buf = "";
+            }
 
             switch (ch) {
             case 'q':
@@ -131,16 +150,20 @@ struct InputThread {
                 return; // Kill input thread
             case 'j':
             case KEY_DOWN:
-                chan->push({Command::VIEW_DOWN});
+                chan->push({Command::DISPLAY_COMMAND, ":"});
+                chan->push({Command::VIEW_DOWN, "", {}, num_payload});
                 break;
             case 'k':
             case KEY_UP:
-                chan->push({Command::VIEW_UP});
+                chan->push({Command::DISPLAY_COMMAND, ":"});
+                chan->push({Command::VIEW_UP, "", {}, num_payload});
                 break;
             case 'g':
+                chan->push({Command::DISPLAY_COMMAND, ":"});
                 chan->push({Command::VIEW_BOF});
                 break;
             case 'G':
+                chan->push({Command::DISPLAY_COMMAND, ":"});
                 chan->push({Command::VIEW_EOF});
                 break;
             case '/': {
@@ -151,25 +174,31 @@ struct InputThread {
                 chan->push({Command::SEARCH_START, pattern_buf});
 
                 // send it cursor position 0
-                chan->push({Command::BUFFER_CURS_POS, "", {cursor_pos}});
+                chan->push({Command::BUFFER_CURS_POS, "", {}, cursor_pos});
                 // now we start processing input in multi char search mode
-                multi_char_search();
+                multi_char_search(num_payload);
                 break;
             }
             case 'n': // this needs to work with search history eventually;
-                chan->push({Command::SEARCH_NEXT, pattern_buf});
+                chan->push({Command::DISPLAY_COMMAND, ":"});
+                chan->push(
+                    {Command::SEARCH_NEXT, pattern_buf, {}, num_payload});
                 break;
             case 'N': // this needs to work with search history eventually;
-                chan->push({Command::SEARCH_PREV, pattern_buf});
+                chan->push({Command::DISPLAY_COMMAND, ":"});
+                chan->push(
+                    {Command::SEARCH_PREV, pattern_buf, {}, num_payload});
                 break;
             case 27: {
                 int opt = poll_and_getch();
                 // Set ESC option
                 switch (opt) {
                 case 'U':
+                    chan->push({Command::DISPLAY_COMMAND, ":"});
                     chan->push({Command::SEARCH_CLEAR, "ESC-U"});
                     break;
                 case 'u':
+                    chan->push({Command::DISPLAY_COMMAND, ":"});
                     chan->push({Command::TOGGLE_HIGHLIGHTING, "ESC-u"});
                     break;
                 default:
@@ -186,9 +215,11 @@ struct InputThread {
                 int opt = poll_and_getch();
                 switch (opt) {
                 case 'I':
+                    chan->push({Command::DISPLAY_COMMAND, ":"});
                     chan->push({Command::TOGGLE_CASELESS, "-I"});
                     break;
                 case 'i':
+                    chan->push({Command::DISPLAY_COMMAND, ":"});
                     chan->push({Command::TOGGLE_CONDITIONALLY_CASELESS, "-i"});
                     break;
                 default:

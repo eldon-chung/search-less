@@ -49,11 +49,17 @@ void Main::run() {
             m_file_task_stop_source.request_stop();
             break;
         case Command::VIEW_DOWN:
-            m_view.scroll_down();
+            for (size_t i = 0; i < std::max((size_t)1, command.payload_num);
+                 ++i) {
+                m_view.scroll_down();
+            }
             display_page();
             break;
         case Command::VIEW_UP:
-            m_view.scroll_up();
+            for (size_t i = 0; i < std::max((size_t)1, command.payload_num);
+                 ++i) {
+                m_view.scroll_up();
+            }
             display_page();
             break;
         case Command::VIEW_BOF:
@@ -132,33 +138,38 @@ void Main::run() {
             }
 
             std::string_view contents = m_model.get_contents();
-            size_t right_bound = m_view.get_starting_offset();
-            size_t curr_line_end =
-                m_view.current_page().begin().get_end_offset();
+            // TODO: optimize?
+            for (size_t i = 0; i < std::max((size_t)1, command.payload_num);
+                 ++i) {
+                size_t right_bound = m_view.get_starting_offset();
+                size_t curr_line_end =
+                    m_view.current_page().begin().get_end_offset();
 
-            // figure out if there is one on our current line;
-            size_t first_match = basic_search_first(
-                contents, m_last_search_pattern, right_bound, curr_line_end,
-                m_caseless_mode != CaselessSearchMode::SENSITIVE);
+                // figure out if there is one on our current line;
+                size_t first_match = basic_search_first(
+                    contents, m_last_search_pattern, right_bound, curr_line_end,
+                    m_caseless_mode != CaselessSearchMode::SENSITIVE);
 
-            // look for instances before us
-            size_t last_match = basic_search_last(
-                contents, m_last_search_pattern, 0, right_bound,
-                m_caseless_mode != CaselessSearchMode::SENSITIVE);
+                // look for instances before us
+                size_t last_match = basic_search_last(
+                    contents, m_last_search_pattern, 0, right_bound,
+                    m_caseless_mode != CaselessSearchMode::SENSITIVE);
 
-            if (last_match == right_bound && first_match != curr_line_end) {
-                // if there isnt another instance behind us, but there is
-                // one instance on our line
-                m_view.display_status("(TOP)");
-            } else if (last_match == right_bound) {
-                display_page();
-                m_view.display_status("Pattern not found");
-            } else {
-                m_view.move_to_byte_offset(last_match);
-                display_page();
-                m_command_str_buffer = ":";
-                m_view.display_command(":");
+                if (last_match == right_bound && first_match != curr_line_end) {
+                    // if there isnt another instance behind us, but there is
+                    // one instance on our line
+                    m_view.display_status("(TOP)");
+                    break;
+                } else if (last_match == right_bound) {
+                    m_view.display_status("Pattern not found");
+                    break;
+                } else {
+                    m_view.move_to_byte_offset(last_match);
+                    m_command_str_buffer = ":";
+                    m_view.display_command(":");
+                }
             }
+            display_page();
             break;
         }
 
@@ -174,28 +185,36 @@ void Main::run() {
             // use the most recent search pattern stored in
             // m_last_search_pattern
             std::string_view contents = m_model.get_contents();
-            size_t left_bound = m_view.get_starting_offset();
-            size_t curr_line_end =
-                m_view.current_page().begin().get_end_offset();
-            size_t right_bound = contents.size();
+            // TODO: optimize?
+            // TODO: Should get nth match, not nth line containing matches
+            // TODO: should display "search cursor" so that multiple matches on
+            // the same line can be `n`d properly
+            for (size_t i = 0; i < std::max((size_t)1, command.payload_num);
+                 ++i) {
+                size_t left_bound = m_view.get_starting_offset();
+                size_t curr_line_end =
+                    m_view.current_page().begin().get_end_offset();
+                size_t right_bound = contents.size();
 
-            size_t curr_line_match = basic_search_first(
-                contents, m_last_search_pattern, left_bound, curr_line_end,
-                m_caseless_mode != CaselessSearchMode::SENSITIVE);
+                size_t curr_line_match = basic_search_first(
+                    contents, m_last_search_pattern, left_bound, curr_line_end,
+                    m_caseless_mode != CaselessSearchMode::SENSITIVE);
 
-            size_t next_match = basic_search_first(
-                contents, m_last_search_pattern, curr_line_end, right_bound,
-                m_caseless_mode != CaselessSearchMode::SENSITIVE);
+                size_t next_match = basic_search_first(
+                    contents, m_last_search_pattern, curr_line_end, right_bound,
+                    m_caseless_mode != CaselessSearchMode::SENSITIVE);
 
-            if (next_match == right_bound && curr_line_match != curr_line_end) {
-                display_page();
-                m_view.display_status("(END)");
-            } else {
-                m_view.move_to_byte_offset(next_match);
-                display_page();
-                m_command_str_buffer = ":";
-                m_view.display_command(":");
+                if (next_match == right_bound &&
+                    curr_line_match != curr_line_end) {
+                    m_view.display_status("(END)");
+                    break;
+                } else {
+                    m_view.move_to_byte_offset(next_match);
+                    m_command_str_buffer = ":";
+                    m_view.display_command(":");
+                }
             }
+            display_page();
             break;
         }
 
@@ -210,19 +229,28 @@ void Main::run() {
             size_t left_bound = m_view.get_starting_offset();
             size_t right_bound = contents.size();
 
-            size_t first_match = basic_search_first(
+            size_t match = basic_search_first(
                 contents, m_last_search_pattern, left_bound, right_bound,
                 m_caseless_mode != CaselessSearchMode::SENSITIVE);
+            // TODO: optimize
+            for (size_t i = 1; i < command.payload_num; ++i) {
+                size_t cur_match = basic_search_first(
+                    contents, m_last_search_pattern, match, right_bound,
+                    m_caseless_mode != CaselessSearchMode::SENSITIVE);
+                if (cur_match == right_bound) {
+                    break;
+                }
+                match = cur_match;
+            }
 
-            if (first_match == m_model.length() ||
-                first_match == std::string::npos) {
+            if (match == m_model.length() || match == std::string::npos) {
                 // this needs to change depending on whether there was
                 // already a search being done
                 m_view.display_status("Pattern not found");
                 display_page();
                 break;
             } else {
-                m_view.move_to_byte_offset(first_match);
+                m_view.move_to_byte_offset(match);
                 display_page();
                 m_command_str_buffer = ":";
                 m_view.display_command(":");
@@ -230,7 +258,7 @@ void Main::run() {
             break;
         }
         case Command::BUFFER_CURS_POS: {
-            m_command_cursor_pos = (uint16_t)command.payload_nums.front();
+            m_command_cursor_pos = (uint16_t)command.payload_num;
             m_view.display_command(m_command_str_buffer, m_command_cursor_pos);
             break;
         }

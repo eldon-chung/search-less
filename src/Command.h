@@ -28,4 +28,5 @@ struct Command {
     Type type = INVALID;
     std::string payload_str = "";
     std::vector<size_t> payload_nums = {};
+    size_t payload_num = 0;
 };
