@@ -121,13 +121,10 @@ void Main::run() {
             m_view.display_command(m_command_str_buffer);
             break;
         }
+
         case Command::SEARCH_PREV: { // assume for now that search_exec was
                                      // definitely called
-
             m_highlight_active = true;
-            if (m_view.begin() == m_view.end()) {
-                break;
-            }
 
             // for now if search pattern is empty, we just break
             if (m_last_search_pattern.empty()) {
@@ -136,7 +133,8 @@ void Main::run() {
 
             std::string_view contents = m_model.get_contents();
             size_t right_bound = m_view.get_starting_offset();
-            size_t curr_line_end = m_view.cursor().get_ending_offset();
+            size_t curr_line_end =
+                m_view.current_page().begin().get_end_offset();
 
             // figure out if there is one on our current line;
             size_t first_match = basic_search_first(
@@ -163,13 +161,10 @@ void Main::run() {
             }
             break;
         }
+
         case Command::SEARCH_NEXT: { // assume for now that search_exec was
                                      // definitely called
-
             m_highlight_active = true;
-            if (m_view.begin() == m_view.end()) {
-                break;
-            }
 
             // for now if search pattern is empty, we just break
             if (m_last_search_pattern.empty()) {
@@ -180,7 +175,8 @@ void Main::run() {
             // m_last_search_pattern
             std::string_view contents = m_model.get_contents();
             size_t left_bound = m_view.get_starting_offset();
-            size_t curr_line_end = m_view.cursor().get_ending_offset();
+            size_t curr_line_end =
+                m_view.current_page().begin().get_end_offset();
             size_t right_bound = contents.size();
 
             size_t curr_line_match = basic_search_first(
@@ -202,12 +198,9 @@ void Main::run() {
             }
             break;
         }
+
         case Command::SEARCH_EXEC: {
             m_highlight_active = true;
-
-            if (m_view.begin() == m_view.end()) {
-                break;
-            }
 
             std::string_view contents = m_model.get_contents();
 

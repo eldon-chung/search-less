@@ -107,7 +107,7 @@ class Model {
 
             std::string_view remaining_contents =
                 m_model->get_contents().substr(m_offset + m_length);
-            size_t next_length = remaining_contents.find_first_of("\n");
+            size_t next_length = remaining_contents.find_first_of('\n');
             if (next_length == std::string::npos) {
                 next_length = remaining_contents.length();
             } else {
@@ -132,7 +132,7 @@ class Model {
 
             std::string_view front_contents =
                 m_model->get_contents().substr(0, m_offset - 1);
-            size_t prev_offset = front_contents.find_last_of("\n");
+            size_t prev_offset = front_contents.find_last_of('\n');
             if (prev_offset == std::string::npos) {
                 prev_offset = 0;
             } else {
@@ -151,6 +151,9 @@ class Model {
             return to_return;
         }
 
+        size_t line_begin_offset() const {
+            return m_offset;
+        }
         size_t line_end_offset() const {
             return m_offset + m_length;
         }
@@ -165,7 +168,7 @@ class Model {
 
     LineIt get_nth_line(size_t line_idx) const {
         // get the left and right bounds
-        size_t first_line_length = m_contents.find_first_of("\n");
+        size_t first_line_length = m_contents.find_first_of('\n');
         if (first_line_length == std::string::npos) {
             first_line_length = m_contents.length();
         } else {
@@ -195,14 +198,14 @@ class Model {
         std::string_view left_half = m_contents.substr(0, byte_offset);
         std::string_view right_half = m_contents.substr(byte_offset);
 
-        size_t left_pos = left_half.find_last_of("\n");
+        size_t left_pos = left_half.find_last_of('\n');
         if (left_pos == std::string::npos) {
             left_pos = 0;
         } else {
             left_pos++;
         }
 
-        size_t right_length = right_half.find_first_of("\n");
+        size_t right_length = right_half.find_first_of('\n');
         if (right_length == std::string::npos) {
             right_length = right_half.length();
         } else {

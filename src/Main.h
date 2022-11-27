@@ -40,12 +40,12 @@ struct Main {
     std::string m_command_str_buffer;
     uint16_t m_command_cursor_pos;
 
-    std::vector<View::Highlights> m_highlight_offsets;
+    std::vector<View::Highlight> m_highlight_offsets;
     std::string m_last_search_pattern;
 
     Main(std::filesystem::directory_entry file_de)
         : m_model(Model::initialize(std::move(file_de))),
-          m_view(View::initialize(&m_nc_mutex, &m_model)),
+          m_view(View::create(&m_nc_mutex, &m_model)),
           m_input(&m_nc_mutex, &m_chan), m_taskmaster(&m_task_chan),
           m_highlight_active(true),
           m_caseless_mode(CaselessSearchMode::SENSITIVE) {
