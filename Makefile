@@ -48,12 +48,11 @@ PRECIOUS_TARGETS += $(BUILDDIR)/%.o
 # Example: adding absl_hash
 # PKGCONFIG_LIBS += absl_hash
 # PKGCONFIG_LIBS += openssl
-# PKGCONFIG_LIBS += ncurses
+PKGCONFIG_LIBS += ncurses
 # PKGCONFIG_LIBS += readline
 
 # Example: adding boost_system (can't use pkg-config cause they dumb)
 # LDFLAGS += -lboost_system
-LDFLAGS += -lncurses
 
 # Example: adding boost asio
 # # Remember to add `openssl` and `boost_system` manually...
@@ -72,7 +71,7 @@ LDFLAGS += -lncurses
 
 .PRECIOUS: $(PRECIOUS_TARGETS)
 
-ifeq ($(PKGCONFIG_LIBS), "")
+ifneq ($(PKGCONFIG_LIBS), "")
 CXXFLAGS += $(shell pkg-config --cflags $(PKGCONFIG_LIBS))
 CFLAGS += $(shell pkg-config --cflags $(PKGCONFIG_LIBS))
 LDFLAGS += $(shell pkg-config --libs $(PKGCONFIG_LIBS))
