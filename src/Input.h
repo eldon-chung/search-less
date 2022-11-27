@@ -129,7 +129,7 @@ struct InputThread {
         while (true) {
             int ch = poll_and_getch();
 
-            size_t num_payload = 1;
+            size_t num_payload = 0;
             // if any error happens during conversion, num_payload is unmodified
             std::from_chars(num_payload_buf.data(),
                             num_payload_buf.data() + num_payload_buf.length(),
@@ -157,6 +157,50 @@ struct InputThread {
             case KEY_UP:
                 chan->push({Command::DISPLAY_COMMAND, ":"});
                 chan->push({Command::VIEW_UP, "", {}, num_payload});
+                break;
+            case 'f':
+            case CTRL('f'):
+            case CTRL('v'):
+            case ' ':
+                chan->push({Command::DISPLAY_COMMAND, ":"});
+                chan->push({Command::VIEW_DOWN_PAGE, "", {}, num_payload});
+                break;
+            case 'b':
+            case CTRL('b'):
+                chan->push({Command::DISPLAY_COMMAND, ":"});
+                chan->push({Command::VIEW_UP_PAGE, "", {}, num_payload});
+                break;
+            case 'z':
+                chan->push({Command::DISPLAY_COMMAND, ":"});
+                if (num_payload != 0) {
+                    chan->push({Command::SET_PAGE_SIZE, "", {}, num_payload});
+                }
+                chan->push({Command::VIEW_DOWN_PAGE});
+                break;
+            case 'w':
+                chan->push({Command::DISPLAY_COMMAND, ":"});
+                if (num_payload != 0) {
+                    chan->push({Command::SET_PAGE_SIZE, "", {}, num_payload});
+                }
+                chan->push({Command::VIEW_UP_PAGE});
+                break;
+            case 'd':
+            case CTRL('d'):
+                chan->push({Command::DISPLAY_COMMAND, ":"});
+                if (num_payload != 0) {
+                    chan->push(
+                        {Command::SET_HALF_PAGE_SIZE, "", {}, num_payload});
+                }
+                chan->push({Command::VIEW_DOWN_HALF_PAGE});
+                break;
+            case 'u':
+            case CTRL('u'):
+                chan->push({Command::DISPLAY_COMMAND, ":"});
+                if (num_payload != 0) {
+                    chan->push(
+                        {Command::SET_HALF_PAGE_SIZE, "", {}, num_payload});
+                }
+                chan->push({Command::VIEW_UP_HALF_PAGE});
                 break;
             case 'g':
                 chan->push({Command::DISPLAY_COMMAND, ":"});

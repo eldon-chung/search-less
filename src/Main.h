@@ -43,6 +43,9 @@ struct Main {
     std::vector<View::Highlight> m_highlight_offsets;
     std::string m_last_search_pattern;
 
+    size_t m_half_page_size;
+    size_t m_page_size;
+
     Main(std::filesystem::directory_entry file_de)
         : m_model(Model::initialize(std::move(file_de))),
           m_view(View::create(&m_nc_mutex, &m_model)),
@@ -61,6 +64,9 @@ struct Main {
         m_view.display_status();
         // schedule a line offset computation
         m_task_chan.push(std::move(read_line_offsets_tasks));
+
+        m_half_page_size = std::max((size_t)1, m_view.m_main_window_height / 2);
+        m_page_size = std::max((size_t)1, m_view.m_main_window_height);
     }
 
     ~Main() {

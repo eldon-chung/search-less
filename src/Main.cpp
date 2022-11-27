@@ -40,8 +40,10 @@ void Main::run() {
             break;
         case Command::RESIZE:
             m_view.handle_resize();
+            m_half_page_size =
+                std::max((size_t)1, m_view.m_main_window_height / 2);
+            m_page_size = std::max((size_t)1, m_view.m_main_window_height);
             display_page();
-            m_view.display_status("handle resize called");
             break;
         case Command::QUIT:
             m_chan.close();
@@ -61,6 +63,44 @@ void Main::run() {
                 m_view.scroll_up();
             }
             display_page();
+            break;
+        case Command::VIEW_DOWN_HALF_PAGE:
+            for (size_t i = 0; i < std::max((size_t)1, command.payload_num) *
+                                       m_half_page_size;
+                 ++i) {
+                m_view.scroll_down();
+            }
+            display_page();
+            break;
+        case Command::VIEW_UP_HALF_PAGE:
+            for (size_t i = 0; i < std::max((size_t)1, command.payload_num) *
+                                       m_half_page_size;
+                 ++i) {
+                m_view.scroll_up();
+            }
+            display_page();
+            break;
+        case Command::VIEW_DOWN_PAGE:
+            for (size_t i = 0;
+                 i < std::max((size_t)1, command.payload_num) * m_page_size;
+                 ++i) {
+                m_view.scroll_down();
+            }
+            display_page();
+            break;
+        case Command::VIEW_UP_PAGE:
+            for (size_t i = 0;
+                 i < std::max((size_t)1, command.payload_num) * m_page_size;
+                 ++i) {
+                m_view.scroll_up();
+            }
+            display_page();
+            break;
+        case Command::SET_HALF_PAGE_SIZE:
+            m_half_page_size = command.payload_num;
+            break;
+        case Command::SET_PAGE_SIZE:
+            m_page_size = command.payload_num;
             break;
         case Command::VIEW_BOF:
             m_view.move_to_top();
