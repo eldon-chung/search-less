@@ -157,6 +157,10 @@ class Model {
         size_t line_end_offset() const {
             return m_offset + m_length;
         }
+
+        Model const *get_model() const {
+            return m_model;
+        }
     };
 
     LineIt begin() const {
