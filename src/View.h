@@ -107,7 +107,7 @@ struct Page {
             LineIt end_line = start_line;
             size_t i = 0;
             for (; i < height; ++i) {
-                if (end_line.get_end_offset() == model->length()) {
+                if (end_line.get_begin_offset() == model->length()) {
                     break;
                 }
                 ++end_line;

@@ -50,11 +50,10 @@ struct Cursor {
     }
 
     [[nodiscard]] Cursor next_wrapped_line(size_t window_width) const {
-        size_t potential_next_offset = m_offset + window_width;
-        if (potential_next_offset >= m_model->length()) {
+        if (m_offset >= m_model->length()) {
             return *this;
         }
-
+        size_t potential_next_offset = m_offset + window_width;
         if (potential_next_offset >= m_cur_line.line_end_offset()) {
             Model::LineIt next_line = ++Model::LineIt(m_cur_line);
             return {m_model, next_line, next_line.line_begin_offset()};
