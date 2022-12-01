@@ -51,49 +51,31 @@ void Main::run() {
             m_file_task_stop_source.request_stop();
             break;
         case Command::VIEW_DOWN:
-            for (size_t i = 0; i < std::max((size_t)1, command.payload_num);
-                 ++i) {
-                m_view.scroll_down();
-            }
+            m_view.scroll_down(std::max(command.payload_num, (size_t)1));
             display_page();
             break;
         case Command::VIEW_UP:
-            for (size_t i = 0; i < std::max((size_t)1, command.payload_num);
-                 ++i) {
-                m_view.scroll_up();
-            }
+            m_view.scroll_up(std::max(command.payload_num, (size_t)1));
             display_page();
             break;
         case Command::VIEW_DOWN_HALF_PAGE:
-            for (size_t i = 0; i < std::max((size_t)1, command.payload_num) *
-                                       m_half_page_size;
-                 ++i) {
-                m_view.scroll_down();
-            }
+            m_view.scroll_down(std::max((size_t)1, command.payload_num) *
+                               m_half_page_size);
             display_page();
             break;
         case Command::VIEW_UP_HALF_PAGE:
-            for (size_t i = 0; i < std::max((size_t)1, command.payload_num) *
-                                       m_half_page_size;
-                 ++i) {
-                m_view.scroll_up();
-            }
+            m_view.scroll_up(std::max((size_t)1, command.payload_num) *
+                             m_half_page_size);
             display_page();
             break;
         case Command::VIEW_DOWN_PAGE:
-            for (size_t i = 0;
-                 i < std::max((size_t)1, command.payload_num) * m_page_size;
-                 ++i) {
-                m_view.scroll_down();
-            }
+            m_view.scroll_down(std::max((size_t)1, command.payload_num) *
+                               m_page_size);
             display_page();
             break;
         case Command::VIEW_UP_PAGE:
-            for (size_t i = 0;
-                 i < std::max((size_t)1, command.payload_num) * m_page_size;
-                 ++i) {
-                m_view.scroll_up();
-            }
+            m_view.scroll_up(std::max((size_t)1, command.payload_num) *
+                             m_page_size);
             display_page();
             break;
         case Command::SET_HALF_PAGE_SIZE:

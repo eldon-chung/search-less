@@ -103,17 +103,21 @@ struct View {
                                              m_main_window_width, m_wrap_lines);
     }
 
-    void scroll_up() {
+    void scroll_up(size_t num_scrolls = 1) {
         Page page = current_page();
         Page::LineIt line = page.begin();
-        --line;
+        while (num_scrolls-- > 0 && line.has_prev()) {
+            --line;
+        }
         m_offset = line.m_cursor.get_offset();
     }
 
-    void scroll_down() {
+    void scroll_down(size_t num_scrolls = 1) {
         Page page = current_page();
         Page::LineIt line = page.begin();
-        ++line;
+        while (num_scrolls-- > 0 && line.has_next()) {
+            ++line;
+        }
         m_offset = line.m_cursor.get_offset();
     }
 

@@ -54,6 +54,16 @@ struct Page {
             return line;
         }
 
+        bool has_next() const {
+            LineIt peek = *this;
+            return *this != ++peek;
+        }
+
+        bool has_prev() const {
+            LineIt peek = *this;
+            return *this != --peek;
+        }
+
         struct Cursed {
             std::string_view cursed;
             std::string_view operator*() const {
