@@ -1,12 +1,13 @@
 #pragma once
 
 #include <cassert>
-#include <curses.h>
 #include <mutex>
-#include <ncurses.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <utility>
+
+#include <curses.h>
+#include <ncurses.h>
 
 #include <sys/ioctl.h>
 #include <unistd.h>

@@ -141,7 +141,27 @@ void Main::run() {
         }
         case Command::SEARCH_START: {
             m_command_str_buffer = command.payload_str;
-            m_view.display_command(m_command_str_buffer);
+            m_command_cursor_pos = (uint16_t)command.payload_num;
+            // The loop is weird because m_command_str_buffer is being mutated
+            // in the loop body
+            for (size_t i = 0; i < m_command_str_buffer.size(); ++i) {
+                std::string replacement;
+                if (m_command_str_buffer[i] < 32) {
+                    replacement = "^";
+                    replacement.push_back(m_command_str_buffer[i] + 0x40);
+                } else if (m_command_str_buffer[i] == '\x7f') {
+                    replacement = "^?";
+                }
+                if (!replacement.empty()) {
+                    m_command_str_buffer = m_command_str_buffer.substr(0, i) +
+                                           replacement +
+                                           m_command_str_buffer.substr(i + 1);
+                    if (m_command_cursor_pos > i) {
+                        m_command_cursor_pos++;
+                    }
+                }
+            }
+            m_view.display_command(m_command_str_buffer, m_command_cursor_pos);
             break;
         }
         case Command::SEARCH_QUIT: {
@@ -178,8 +198,8 @@ void Main::run() {
                     m_caseless_mode != CaselessSearchMode::SENSITIVE);
 
                 if (last_match == right_bound && first_match != curr_line_end) {
-                    // if there isnt another instance behind us, but there is
-                    // one instance on our line
+                    // if there isnt another instance behind us, but there
+                    // is one instance on our line
                     m_view.display_status("(TOP)");
                     break;
                 } else if (last_match == right_bound) {
@@ -209,8 +229,8 @@ void Main::run() {
             std::string_view contents = m_model.get_contents();
             // TODO: optimize?
             // TODO: Should get nth match, not nth line containing matches
-            // TODO: should display "search cursor" so that multiple matches on
-            // the same line can be `n`d properly
+            // TODO: should display "search cursor" so that multiple matches
+            // on the same line can be `n`d properly
             for (size_t i = 0; i < std::max((size_t)1, command.payload_num);
                  ++i) {
                 size_t left_bound = m_view.get_starting_offset();

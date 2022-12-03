@@ -49,7 +49,7 @@ PRECIOUS_TARGETS += $(BUILDDIR)/%.o
 # PKGCONFIG_LIBS += absl_hash
 # PKGCONFIG_LIBS += openssl
 PKGCONFIG_LIBS += ncurses
-# PKGCONFIG_LIBS += readline
+PKGCONFIG_LIBS += readline
 
 # Example: adding boost_system (can't use pkg-config cause they dumb)
 # LDFLAGS += -lboost_system

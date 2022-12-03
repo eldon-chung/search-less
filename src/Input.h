@@ -18,18 +18,11 @@
 #include "Channel.h"
 #include "Command.h"
 
-enum KeyType {
-    ARROW,
-    ALPHA,
-    SPACE,
-    NUMBER,
-    OTHER,
-};
-
 struct InputThread {
     std::mutex *nc_mutex;
     Channel<Command> *chan;
     std::thread t;
+    int devttyfd;
     struct pollfd pollfds[1];
 
     std::string pattern_buf = "";
@@ -39,7 +32,8 @@ struct InputThread {
 
     InputThread(std::mutex *nc_mutex, Channel<Command> *chan)
         : nc_mutex(nc_mutex), chan(chan), fd_ready(0) {
-        pollfds[0].fd = open("/dev/tty", O_RDONLY);
+        devttyfd = open("/dev/tty", O_RDONLY);
+        pollfds[0].fd = devttyfd;
         pollfds[0].events = POLLIN;
 
         t = std::thread(&InputThread::start, this);
@@ -53,6 +47,10 @@ struct InputThread {
         t.join();
     }
 
+    void poll() {
+        ::poll(pollfds, 1, -1);
+    }
+
     int poll_and_getch() {
         {
             // read from the getch buffer first instead of polling
@@ -64,64 +62,12 @@ struct InputThread {
         }
 
         // if we hit this point the nc buffer was empty
-        poll(pollfds, 1, -1);
+        poll();
         std::scoped_lock lock(*nc_mutex);
         return getch();
     }
 
-    void multi_char_search(size_t num_payload) {
-        while (true) {
-            int key = poll_and_getch();
-            switch (key) {
-            case KEY_LEFT:
-                cursor_pos -= (cursor_pos > 1) ? 1 : 0;
-                chan->push({Command::SEARCH_START, pattern_buf});
-                chan->push({Command::BUFFER_CURS_POS, "", {}, cursor_pos});
-                break;
-            case KEY_RIGHT:
-                cursor_pos += (cursor_pos < pattern_buf.size()) ? 1 : 0;
-                chan->push({Command::SEARCH_START, pattern_buf});
-                chan->push({Command::BUFFER_CURS_POS, "", {}, cursor_pos});
-                break;
-            case KEY_UP:
-            case KEY_DOWN:
-                using namespace std::string_literals;
-                chan->push({Command::DISPLAY_COMMAND,
-                            "We aren't handling search history yet."s});
-                break;
-            case KEY_BACKSPACE:
-                pattern_buf.erase(--cursor_pos, 1);
-                chan->push({Command::SEARCH_START, pattern_buf});
-                chan->push({Command::BUFFER_CURS_POS, "", {}, cursor_pos});
-
-                break;
-            case KEY_ENTER:
-            case '\n':
-                break;
-            default:
-                // everything else goes into the buffer
-                pattern_buf.insert(cursor_pos++, 1, (char)key);
-
-                chan->push({Command::SEARCH_START, pattern_buf});
-                chan->push({Command::BUFFER_CURS_POS, "", {}, cursor_pos});
-
-                break;
-            }
-
-            if (cursor_pos == 0) {
-                chan->push({Command::SEARCH_QUIT, ""});
-                break;
-            }
-
-            if (key == KEY_ENTER || key == '\n') {
-                chan->push(
-                    {Command::SEARCH_EXEC, pattern_buf, {}, num_payload});
-                break;
-            }
-        }
-
-        return;
-    }
+    void multi_char_search(size_t num_payload);
 
     void start() {
         std::string num_payload_buf;
