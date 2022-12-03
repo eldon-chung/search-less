@@ -38,8 +38,9 @@ struct Cursor {
         }
         if (m_offset == m_cur_line.line_begin_offset()) {
             FileHandle::LineIt prev_line = --FileHandle::LineIt(m_cur_line);
-            size_t new_offset = prev_line.line_begin_offset() +
-                                prev_line->size() / window_width * window_width;
+            size_t new_offset =
+                prev_line.line_begin_offset() +
+                (prev_line->size() - 1) / window_width * window_width;
             return {prev_line, new_offset};
         } else {
             size_t new_offset = std::max(m_offset - window_width,
