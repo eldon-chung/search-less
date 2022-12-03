@@ -7,8 +7,8 @@
 #include <signal.h>
 #include <stdio.h>
 
+#include "FileHandle.h"
 #include "Input.h"
-#include "Model.h"
 #include "View.h"
 #include "Worker.h"
 #include "search.h"
@@ -22,7 +22,7 @@ struct Main {
 
     std::mutex m_nc_mutex;
 
-    Model m_model;
+    FileHandle m_model;
     View m_view;
 
     InputThread m_input;
@@ -47,7 +47,7 @@ struct Main {
     size_t m_page_size;
 
     Main(std::filesystem::directory_entry file_de)
-        : m_model(Model::initialize(std::move(file_de))),
+        : m_model(FileHandle::initialize(std::move(file_de))),
           m_view(View::create(&m_nc_mutex, &m_model)),
           m_input(&m_nc_mutex, &m_chan), m_taskmaster(&m_task_chan),
           m_highlight_active(true),

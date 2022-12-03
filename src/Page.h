@@ -83,7 +83,7 @@ struct Page {
     LineIt m_begin;
     LineIt m_end;
 
-    static Page get_page_at_byte_offset(Model const *model, size_t offset,
+    static Page get_page_at_byte_offset(FileHandle const *model, size_t offset,
                                         size_t height, size_t width,
                                         bool wrap_lines) {
         Cursor start_cursor = Cursor::get_cursor_at_byte_offset(model, offset);

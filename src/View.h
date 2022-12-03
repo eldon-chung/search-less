@@ -12,7 +12,7 @@
 #include <unistd.h>
 
 #include "Cursor.h"
-#include "Model.h"
+#include "FileHandle.h"
 #include "Page.h"
 
 inline std::string_view strip_trailing_rn(std::string_view str) {
@@ -34,19 +34,19 @@ struct View {
     size_t m_main_window_height;
     size_t m_main_window_width;
 
-    Model const *m_model;
+    FileHandle const *m_model;
     size_t m_offset;
     bool m_wrap_lines;
 
     std::string m_status;
     std::string m_command;
 
-    static View create(std::mutex *nc_mutex, const Model *model) {
+    static View create(std::mutex *nc_mutex, const FileHandle *model) {
         return View(nc_mutex, model);
     }
 
   private:
-    View(std::mutex *nc_mutex, Model const *model) {
+    View(std::mutex *nc_mutex, FileHandle const *model) {
         std::scoped_lock lock(*nc_mutex);
         initscr();
         start_color();

@@ -1,9 +1,9 @@
 #pragma once
 
-#include "Model.h"
+#include "FileHandle.h"
 
 struct Cursor {
-    Model::LineIt m_cur_line;
+    FileHandle::LineIt m_cur_line;
     size_t m_offset;
 
     // TODO: if non printable ascii is encountered, make sure to count them as
@@ -12,7 +12,8 @@ struct Cursor {
     // "abcdefgh" fits on one line, but
     // "<00><00>" only 2 null bytes fit in the same space.
 
-    static Cursor get_cursor_at_byte_offset(Model const *model, size_t offset) {
+    static Cursor get_cursor_at_byte_offset(FileHandle const *model,
+                                            size_t offset) {
         return {model->get_line_at_byte_offset(offset), offset};
     }
 
@@ -36,7 +37,7 @@ struct Cursor {
             return *this;
         }
         if (m_offset == m_cur_line.line_begin_offset()) {
-            Model::LineIt prev_line = --Model::LineIt(m_cur_line);
+            FileHandle::LineIt prev_line = --FileHandle::LineIt(m_cur_line);
             size_t new_offset = prev_line.line_begin_offset() +
                                 prev_line->size() / window_width * window_width;
             return {prev_line, new_offset};
@@ -53,7 +54,7 @@ struct Cursor {
         }
         size_t potential_next_offset = m_offset + window_width;
         if (potential_next_offset >= m_cur_line.line_end_offset()) {
-            Model::LineIt next_line = ++Model::LineIt(m_cur_line);
+            FileHandle::LineIt next_line = ++FileHandle::LineIt(m_cur_line);
             return {next_line, next_line.line_begin_offset()};
         }
 
@@ -61,7 +62,7 @@ struct Cursor {
             m_cur_line->substr(window_width).find_first_not_of("\r\n") ==
             std::string_view::npos;
         if (rest_of_line_is_newlines) {
-            Model::LineIt next_line = ++Model::LineIt(m_cur_line);
+            FileHandle::LineIt next_line = ++FileHandle::LineIt(m_cur_line);
             return {next_line, next_line.line_begin_offset()};
         }
 
@@ -72,7 +73,7 @@ struct Cursor {
         if (m_cur_line.line_begin_offset() == 0) {
             return *this;
         }
-        Model::LineIt prev_line = --Model::LineIt(m_cur_line);
+        FileHandle::LineIt prev_line = --FileHandle::LineIt(m_cur_line);
         return {prev_line, prev_line.line_begin_offset()};
     }
 
@@ -80,7 +81,7 @@ struct Cursor {
         if (m_cur_line.line_end_offset() == m_cur_line.get_model()->length()) {
             return *this;
         }
-        Model::LineIt next_line = ++Model::LineIt(m_cur_line);
+        FileHandle::LineIt next_line = ++FileHandle::LineIt(m_cur_line);
         return {next_line, next_line.line_begin_offset()};
     }
 

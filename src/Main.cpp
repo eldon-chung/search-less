@@ -315,25 +315,30 @@ void Main::run() {
 }
 
 int main(int argc, char **argv) {
-    if (argc < 2) {
+
+    if (argc >= 2) {
+        // try to open the file
+        std::filesystem::directory_entry read_file(argv[1]);
+
+        if (read_file.is_directory()) {
+            fprintf(stderr, "%s is a directory.\n", argv[1]);
+            exit(1);
+        } else if (!read_file.is_regular_file()) {
+            fprintf(stderr,
+                    "%s is not a regular file. We don't support opening "
+                    "non-regular files.\n",
+                    argv[1]);
+            exit(1);
+        }
+        Main main{read_file};
+        main.run();
+    }
+
+    if (!isatty(0)) {
+        fprintf(stdout, "start reading from tty.\n");
+    } else {
         fprintf(stderr, "missing filename.\n");
-        exit(1);
+        exit(0);
     }
-
-    // try to open the file
-    std::filesystem::directory_entry read_file(argv[1]);
-
-    if (read_file.is_directory()) {
-        fprintf(stderr, "%s is a directory.\n", argv[1]);
-        exit(1);
-    } else if (!read_file.is_regular_file()) {
-        fprintf(stderr,
-                "%s is not a regular file. We don't support opening "
-                "non-regular files.\n",
-                argv[1]);
-        exit(1);
-    }
-    Main main{read_file};
-    main.run();
     return 0;
 }

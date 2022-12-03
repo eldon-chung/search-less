@@ -21,7 +21,7 @@
 
 #include "Channel.h"
 
-class Model {
+class FileHandle {
     // A model is a collection of lines, and possibly known or unknown line
     // numbers, computed lazily / asynchronously
     std::filesystem::directory_entry m_de;
@@ -31,14 +31,14 @@ class Model {
     // should we be using string view?
     int m_fd;
 
-    Model(std::filesystem::directory_entry de, std::string_view contents,
-          int fd)
+    FileHandle(std::filesystem::directory_entry de, std::string_view contents,
+               int fd)
         : m_de(std::move(de)), m_contents(std::move(contents)),
           m_num_processed_bytes(0), m_fd(fd) {
     }
 
   public:
-    static Model initialize(std::filesystem::directory_entry de) {
+    static FileHandle initialize(std::filesystem::directory_entry de) {
         // there's the mmap way.
         // we're guaranteed that on call this is a valid directory entry that
         // refers to a regular file
@@ -60,13 +60,13 @@ class Model {
 
         std::string_view contents{contents_ptr, (size_t)statbuf.st_size};
 
-        return Model(std::move(de), std::move(contents), fd);
+        return FileHandle(std::move(de), std::move(contents), fd);
     }
-    Model(Model const &) = delete;
-    Model &operator=(Model const &) = delete;
-    Model(Model &&) = delete;
-    Model &operator=(Model &&) = delete;
-    ~Model() {
+    FileHandle(FileHandle const &) = delete;
+    FileHandle &operator=(FileHandle const &) = delete;
+    FileHandle(FileHandle &&) = delete;
+    FileHandle &operator=(FileHandle &&) = delete;
+    ~FileHandle() {
         munmap((void *)m_contents.data(), m_contents.size());
     }
 
@@ -77,7 +77,7 @@ class Model {
         using reference = std::string_view;
         using iterator_category = std::bidirectional_iterator_tag;
 
-        const Model *m_model;
+        const FileHandle *m_model;
         size_t m_offset; // byte position of start of line
                          // TODO: make it an iterator haha
         size_t m_length;
@@ -158,7 +158,7 @@ class Model {
             return m_offset + m_length;
         }
 
-        Model const *get_model() const {
+        FileHandle const *get_model() const {
             return m_model;
         }
     };
