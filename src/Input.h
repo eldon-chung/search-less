@@ -161,10 +161,7 @@ struct InputThread {
                 cursor_pos = 1;
 
                 // start search mode in main
-                chan->push({Command::SEARCH_START, pattern_buf});
-
-                // send it cursor position 0
-                chan->push({Command::BUFFER_CURS_POS, "", {}, cursor_pos});
+                chan->push({Command::SEARCH_START, pattern_buf, {}, 0});
                 // now we start processing input in multi char search mode
                 multi_char_search(num_payload);
                 break;

@@ -9,7 +9,8 @@
 Channel<Command> *command_channel;
 
 void handle_sigwinch(int) {
-    command_channel->push_signal(Command{Command::RESIZE, "WINCH"});
+    rl_resize_terminal();
+    command_channel->push_signal(Command{Command::RESIZE});
 }
 
 void register_for_sigwinch_channel(Channel<Command> *to_register) {

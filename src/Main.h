@@ -38,7 +38,8 @@ struct Main {
     CaselessSearchMode m_caseless_mode;
 
     std::string m_command_str_buffer;
-    uint16_t m_command_cursor_pos;
+    size_t m_command_start_pos;
+    size_t m_command_cursor_pos;
 
     std::vector<View::Highlight> m_highlight_offsets;
     std::string m_last_search_pattern;

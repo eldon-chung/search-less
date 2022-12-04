@@ -227,15 +227,25 @@ struct View {
         wrefresh(m_command_window_ptr);
     }
 
-    void display_command(std::string_view command, uint16_t cursor_pos) {
+    void display_command(std::string_view command, size_t cursor_pos) {
+        if (cursor_pos >= m_main_window_width) {
+            size_t half_width = (m_main_window_width + 1) / 2;
+            size_t adjusted_cursor_pos =
+                (cursor_pos - half_width) % half_width + half_width;
+            command.remove_prefix(cursor_pos - adjusted_cursor_pos);
+            cursor_pos = adjusted_cursor_pos;
+        }
+
         std::scoped_lock lock(*m_nc_mutex);
         werase(m_command_window_ptr);
         wattrset(m_command_window_ptr, WA_NORMAL);
         mvwaddnstr(m_command_window_ptr, 0, 0, command.data(),
                    command.length());
 
-        mvwchgat(m_command_window_ptr, 0, (int)cursor_pos, (int)1, WA_STANDOUT,
-                 0, NULL);
+        if (cursor_pos < std::numeric_limits<int>::max()) {
+            mvwchgat(m_command_window_ptr, 0, (int)cursor_pos, (int)1,
+                     WA_STANDOUT, 0, NULL);
+        }
         wrefresh(m_command_window_ptr);
     }
 

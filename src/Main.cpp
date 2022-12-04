@@ -141,7 +141,7 @@ void Main::run() {
         }
         case Command::SEARCH_START: {
             m_command_str_buffer = command.payload_str;
-            m_command_cursor_pos = (uint16_t)command.payload_num;
+            m_command_cursor_pos = command.payload_num;
             // The loop is weird because m_command_str_buffer is being mutated
             // in the loop body
             for (size_t i = 0; i < m_command_str_buffer.size(); ++i) {
@@ -297,11 +297,6 @@ void Main::run() {
                 m_command_str_buffer = ":";
                 m_view.display_command(":");
             }
-            break;
-        }
-        case Command::BUFFER_CURS_POS: {
-            m_command_cursor_pos = (uint16_t)command.payload_num;
-            m_view.display_command(m_command_str_buffer, m_command_cursor_pos);
             break;
         }
         case Command::UPDATE_LINE_IDXS: {
