@@ -24,6 +24,7 @@ struct Command {
         SEARCH_PREV,
         RESIZE,
         DISPLAY_COMMAND,
+        DISPLAY_STATUS,
         TOGGLE_CASELESS,
         TOGGLE_CONDITIONALLY_CASELESS,
         UPDATE_LINE_IDXS,

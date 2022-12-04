@@ -37,8 +37,8 @@ struct Main {
     };
     CaselessSearchMode m_caseless_mode;
 
+    std::string m_status_str_buffer;
     std::string m_command_str_buffer;
-    size_t m_command_start_pos;
     size_t m_command_cursor_pos;
 
     std::vector<View::Highlight> m_highlight_offsets;
@@ -61,8 +61,8 @@ struct Main {
                                  0);
         };
 
-        m_view.display_page_at({});
-        m_view.display_status();
+        display_page();
+        display_command_or_status();
         // schedule a line offset computation
         m_task_chan.push(std::move(read_line_offsets_tasks));
 
@@ -84,5 +84,17 @@ struct Main {
 
   private:
     void update_screen_highlight_offsets();
+
     void display_page();
+    void display_command_or_status();
+
+    void set_command(std::string command, size_t cursor_pos) {
+        m_command_str_buffer = std::move(command);
+        m_command_cursor_pos = cursor_pos;
+        display_command_or_status();
+    }
+    void set_status(std::string status) {
+        m_status_str_buffer = std::move(status);
+        display_command_or_status();
+    }
 };

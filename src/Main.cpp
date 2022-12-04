@@ -29,6 +29,22 @@ void Main::display_page() {
     }
 }
 
+void Main::display_command_or_status() {
+    if (!m_command_str_buffer.empty()) {
+        fprintf(stderr, "0\n");
+        m_view.display_command(m_command_str_buffer, m_command_cursor_pos);
+    } else if (!m_status_str_buffer.empty()) {
+        fprintf(stderr, "1\n");
+        m_view.display_status(m_status_str_buffer);
+    } else if (!m_last_search_pattern.empty()) {
+        fprintf(stderr, "2\n");
+        m_view.display_command(":", 1);
+    } else {
+        fprintf(stderr, "3\n");
+        m_view.display_status(m_model.relative_path());
+    }
+}
+
 void Main::run() {
 
     while (true) {
@@ -87,6 +103,9 @@ void Main::run() {
         case Command::VIEW_BOF:
             m_view.move_to_top();
             display_page();
+            if (!m_status_str_buffer.empty()) {
+                set_status("");
+            }
             break;
         case Command::VIEW_EOF:
             if (m_model.has_changed()) {
@@ -107,12 +126,20 @@ void Main::run() {
             }
             m_view.move_to_end();
             display_page();
+            if (!m_status_str_buffer.empty()) {
+                set_status("");
+            }
             break;
         case Command::DISPLAY_COMMAND: {
-            m_view.display_command(command.payload_str);
+            set_command(command.payload_str, command.payload_num);
+            break;
+        }
+        case Command::DISPLAY_STATUS: {
+            set_status(command.payload_str);
             break;
         }
         case Command::TOGGLE_CASELESS: {
+            set_command("", 0);
             if (m_caseless_mode == CaselessSearchMode::INSENSITIVE) {
                 m_caseless_mode = CaselessSearchMode::SENSITIVE;
                 m_view.display_status(command.payload_str +
@@ -140,38 +167,41 @@ void Main::run() {
             break;
         }
         case Command::SEARCH_START: {
-            m_command_str_buffer = command.payload_str;
-            m_command_cursor_pos = command.payload_num;
-            // The loop is weird because m_command_str_buffer is being mutated
+            // The loop is weird because command.payload_str is being mutated
             // in the loop body
-            for (size_t i = 0; i < m_command_str_buffer.size(); ++i) {
+
+            for (size_t i = 0; i < command.payload_str.size(); ++i) {
                 std::string replacement;
-                if (m_command_str_buffer[i] < 32) {
+                if (command.payload_str[i] < 32) {
                     replacement = "^";
-                    replacement.push_back(m_command_str_buffer[i] + 0x40);
-                } else if (m_command_str_buffer[i] == '\x7f') {
+                    replacement.push_back(command.payload_str[i] + 0x40);
+                } else if (command.payload_str[i] == '\x7f') {
                     replacement = "^?";
                 }
                 if (!replacement.empty()) {
-                    m_command_str_buffer = m_command_str_buffer.substr(0, i) +
-                                           replacement +
-                                           m_command_str_buffer.substr(i + 1);
-                    if (m_command_cursor_pos > i) {
-                        m_command_cursor_pos++;
+                    command.payload_str = command.payload_str.substr(0, i) +
+                                          replacement +
+                                          command.payload_str.substr(i + 1);
+                    if (command.payload_num > i) {
+                        command.payload_num++;
                     }
                 }
             }
-            m_view.display_command(m_command_str_buffer, m_command_cursor_pos);
+
+            set_command(command.payload_str, command.payload_num);
+            set_status("");
             break;
         }
         case Command::SEARCH_QUIT: {
-            m_command_str_buffer = ":";
-            m_view.display_command(m_command_str_buffer);
+            set_command("", 0);
+            set_status("");
             break;
         }
 
         case Command::SEARCH_PREV: { // assume for now that search_exec was
                                      // definitely called
+            set_command("", 0);
+            set_status("");
             m_highlight_active = true;
 
             // for now if search pattern is empty, we just break
@@ -200,15 +230,13 @@ void Main::run() {
                 if (last_match == right_bound && first_match != curr_line_end) {
                     // if there isnt another instance behind us, but there
                     // is one instance on our line
-                    m_view.display_status("(TOP)");
+                    set_status("(TOP)");
                     break;
                 } else if (last_match == right_bound) {
-                    m_view.display_status("Pattern not found");
+                    set_status("Pattern not found");
                     break;
                 } else {
                     m_view.move_to_byte_offset(last_match);
-                    m_command_str_buffer = ":";
-                    m_view.display_command(":");
                 }
             }
             display_page();
@@ -217,6 +245,8 @@ void Main::run() {
 
         case Command::SEARCH_NEXT: { // assume for now that search_exec was
                                      // definitely called
+            set_command("", 0);
+            set_status("");
             m_highlight_active = true;
 
             // for now if search pattern is empty, we just break
@@ -248,12 +278,10 @@ void Main::run() {
 
                 if (next_match == right_bound &&
                     curr_line_match != curr_line_end) {
-                    m_view.display_status("(END)");
+                    set_status("(END)");
                     break;
                 } else {
                     m_view.move_to_byte_offset(next_match);
-                    m_command_str_buffer = ":";
-                    m_view.display_command(":");
                 }
             }
             display_page();
@@ -261,13 +289,15 @@ void Main::run() {
         }
 
         case Command::SEARCH_EXEC: {
+            set_command("", 0);
+            set_status("");
             m_highlight_active = true;
 
             std::string_view contents = m_model.get_contents();
 
-            // update the search pattern to m_command_str_buffer
-            m_last_search_pattern = std::string{
-                m_command_str_buffer.begin() + 1, m_command_str_buffer.end()};
+            // update the search pattern
+            m_last_search_pattern = std::string{command.payload_str.begin(),
+                                                command.payload_str.end()};
             size_t left_bound = m_view.get_starting_offset();
             size_t right_bound = contents.size();
 
@@ -288,15 +318,12 @@ void Main::run() {
             if (match == m_model.length() || match == std::string::npos) {
                 // this needs to change depending on whether there was
                 // already a search being done
-                m_view.display_status("Pattern not found");
-                display_page();
+                set_status("Pattern not found");
                 break;
             } else {
                 m_view.move_to_byte_offset(match);
-                display_page();
-                m_command_str_buffer = ":";
-                m_view.display_command(":");
             }
+            display_page();
             break;
         }
         case Command::UPDATE_LINE_IDXS: {
@@ -305,7 +332,7 @@ void Main::run() {
         }
         case Command::TOGGLE_HIGHLIGHTING: {
             if (m_last_search_pattern.empty()) {
-                m_view.display_status("No previous search pattern.");
+                set_status("No previous search pattern.");
                 break;
             }
 
@@ -316,8 +343,9 @@ void Main::run() {
         }
         case Command::SEARCH_CLEAR: {
             m_last_search_pattern.clear();
+            set_command("", 0);
             m_highlight_active = false;
-            m_view.display_status("Search cleared.");
+            set_status("Search cleared.");
 
             display_page();
             break;

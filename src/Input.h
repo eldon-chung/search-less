@@ -84,8 +84,24 @@ struct InputThread {
             if ('0' <= ch && ch <= '9') {
                 using namespace std::string_literals;
                 num_payload_buf.push_back((char)ch);
-                chan->push({Command::DISPLAY_COMMAND, ":"s + num_payload_buf});
+                chan->push({Command::DISPLAY_COMMAND,
+                            ":"s + num_payload_buf,
+                            {},
+                            num_payload_buf.size() + 1});
                 continue;
+            } else if (ch == KEY_BACKSPACE) {
+                if (num_payload_buf.empty()) {
+                    chan->push({Command::DISPLAY_COMMAND, "", {}, 0});
+                    continue;
+                } else {
+                    using namespace std::string_literals;
+                    num_payload_buf.pop_back();
+                    chan->push({Command::DISPLAY_COMMAND,
+                                ":"s + num_payload_buf,
+                                {},
+                                num_payload_buf.size() + 1});
+                    continue;
+                }
             } else {
                 num_payload_buf = "";
             }
@@ -99,35 +115,35 @@ struct InputThread {
                 return; // Kill input thread
             case 'j':
             case KEY_DOWN:
-                chan->push({Command::DISPLAY_COMMAND, ":"});
+                chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
                 chan->push({Command::VIEW_DOWN, "", {}, num_payload});
                 break;
             case 'k':
             case KEY_UP:
-                chan->push({Command::DISPLAY_COMMAND, ":"});
+                chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
                 chan->push({Command::VIEW_UP, "", {}, num_payload});
                 break;
             case 'f':
             case CTRL('f'):
             case CTRL('v'):
             case ' ':
-                chan->push({Command::DISPLAY_COMMAND, ":"});
+                chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
                 chan->push({Command::VIEW_DOWN_PAGE, "", {}, num_payload});
                 break;
             case 'b':
             case CTRL('b'):
-                chan->push({Command::DISPLAY_COMMAND, ":"});
+                chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
                 chan->push({Command::VIEW_UP_PAGE, "", {}, num_payload});
                 break;
             case 'z':
-                chan->push({Command::DISPLAY_COMMAND, ":"});
+                chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
                 if (num_payload != 0) {
                     chan->push({Command::SET_PAGE_SIZE, "", {}, num_payload});
                 }
                 chan->push({Command::VIEW_DOWN_PAGE});
                 break;
             case 'w':
-                chan->push({Command::DISPLAY_COMMAND, ":"});
+                chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
                 if (num_payload != 0) {
                     chan->push({Command::SET_PAGE_SIZE, "", {}, num_payload});
                 }
@@ -135,7 +151,7 @@ struct InputThread {
                 break;
             case 'd':
             case CTRL('d'):
-                chan->push({Command::DISPLAY_COMMAND, ":"});
+                chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
                 if (num_payload != 0) {
                     chan->push(
                         {Command::SET_HALF_PAGE_SIZE, "", {}, num_payload});
@@ -144,7 +160,7 @@ struct InputThread {
                 break;
             case 'u':
             case CTRL('u'):
-                chan->push({Command::DISPLAY_COMMAND, ":"});
+                chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
                 if (num_payload != 0) {
                     chan->push(
                         {Command::SET_HALF_PAGE_SIZE, "", {}, num_payload});
@@ -152,11 +168,11 @@ struct InputThread {
                 chan->push({Command::VIEW_UP_HALF_PAGE});
                 break;
             case 'g':
-                chan->push({Command::DISPLAY_COMMAND, ":"});
+                chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
                 chan->push({Command::VIEW_BOF});
                 break;
             case 'G':
-                chan->push({Command::DISPLAY_COMMAND, ":"});
+                chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
                 chan->push({Command::VIEW_EOF});
                 break;
             case '/': {
@@ -170,12 +186,12 @@ struct InputThread {
                 break;
             }
             case 'n': // this needs to work with search history eventually;
-                chan->push({Command::DISPLAY_COMMAND, ":"});
+                chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
                 chan->push(
                     {Command::SEARCH_NEXT, pattern_buf, {}, num_payload});
                 break;
             case 'N': // this needs to work with search history eventually;
-                chan->push({Command::DISPLAY_COMMAND, ":"});
+                chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
                 chan->push(
                     {Command::SEARCH_PREV, pattern_buf, {}, num_payload});
                 break;
@@ -184,37 +200,37 @@ struct InputThread {
                 // Set ESC option
                 switch (opt) {
                 case 'U':
-                    chan->push({Command::DISPLAY_COMMAND, ":"});
+                    chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
                     chan->push({Command::SEARCH_CLEAR, "ESC-U"});
                     break;
                 case 'u':
-                    chan->push({Command::DISPLAY_COMMAND, ":"});
+                    chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
                     chan->push({Command::TOGGLE_HIGHLIGHTING, "ESC-u"});
                     break;
                 default:
                     using namespace std::string_literals;
-                    chan->push({Command::DISPLAY_COMMAND,
+                    chan->push({Command::DISPLAY_STATUS,
                                 "Unknown option: ESC-"s + keyname(opt)});
                     break;
                 }
                 break;
             }
             case '-': {
-                chan->push({Command::DISPLAY_COMMAND, "Set option: -"});
+                chan->push({Command::DISPLAY_COMMAND, "Set option: -", {}, 13});
                 // Set option
                 int opt = poll_and_getch();
                 switch (opt) {
                 case 'I':
-                    chan->push({Command::DISPLAY_COMMAND, ":"});
+                    chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
                     chan->push({Command::TOGGLE_CASELESS, "-I"});
                     break;
                 case 'i':
-                    chan->push({Command::DISPLAY_COMMAND, ":"});
+                    chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
                     chan->push({Command::TOGGLE_CONDITIONALLY_CASELESS, "-i"});
                     break;
                 default:
                     using namespace std::string_literals;
-                    chan->push({Command::DISPLAY_COMMAND,
+                    chan->push({Command::DISPLAY_STATUS,
                                 "Unknown option: -"s + keyname(opt)});
                     break;
                 }

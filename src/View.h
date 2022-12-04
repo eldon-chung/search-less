@@ -39,9 +39,6 @@ struct View {
     size_t m_offset;
     bool m_wrap_lines;
 
-    std::string m_status;
-    std::string m_command;
-
     static View create(std::mutex *nc_mutex, const FileHandle *model,
                        FILE *tty) {
         return View(nc_mutex, model, tty);
@@ -82,9 +79,6 @@ struct View {
         m_model = model;
         m_wrap_lines = true;
         m_offset = 0;
-
-        m_status = "";
-        m_command = "";
     }
 
   public:
@@ -219,15 +213,6 @@ struct View {
         wrefresh(m_main_window_ptr);
     }
 
-    void display_command(std::string_view command) {
-        std::scoped_lock lock(*m_nc_mutex);
-        werase(m_command_window_ptr);
-        wattrset(m_command_window_ptr, WA_NORMAL);
-        mvwaddnstr(m_command_window_ptr, 0, 0, command.data(),
-                   command.length());
-        wrefresh(m_command_window_ptr);
-    }
-
     void display_command(std::string_view command, size_t cursor_pos) {
         if (cursor_pos >= m_main_window_width) {
             size_t half_width = (m_main_window_width + 1) / 2;
@@ -257,11 +242,6 @@ struct View {
         mvwaddnstr(m_command_window_ptr, 0, 0, status.data(),
                    std::min(status.length(), m_main_window_width));
         wrefresh(m_command_window_ptr);
-    }
-
-    void display_status() {
-        std::string relative_path = m_model->relative_path();
-        display_status(relative_path);
     }
 
     void handle_resize() {
