@@ -38,7 +38,7 @@ PRECIOUS_TARGETS += $(BUILDDIR)
 
 # sources
 SRCS := $(shell find src -iname "*.cpp")
-OBJS := $(SRCS:%.cpp=%.o)
+OBJS := $(SRCS:%.cpp=$(BUILDDIR)/%.o)
 
 $(BUILDDIR)/%.o: %.cpp Makefile
 	mkdir -p $(shell dirname $@)
@@ -79,10 +79,9 @@ endif
 
 # Targets
 
-BUILDOBJS := $(OBJS:%=$(BUILDDIR)/%)
-$(BUILDDIR)/main.out: $(BUILDOBJS) Makefile
+$(BUILDDIR)/main.out: $(OBJS) Makefile
 	mkdir -p $(shell dirname $@)
-	$(LINK.cpp) $(BUILDOBJS) -MMD $(LOADLIBES) $(LDLIBS) $(OUTPUT_OPTION)
+	$(LINK.cpp) $(OBJS) -MMD $(LDLIBS) $(OUTPUT_OPTION)
 
 my_all: $(BUILDDIR)/main.out;
 # elditor: $(BUILDDIR)/elditor.out;
