@@ -47,10 +47,10 @@ struct Main {
     size_t m_half_page_size;
     size_t m_page_size;
 
-    Main(std::filesystem::directory_entry file_de)
+    Main(std::filesystem::directory_entry file_de, FILE *tty)
         : m_model(FileHandle::initialize(std::move(file_de))),
-          m_view(View::create(&m_nc_mutex, &m_model)),
-          m_input(&m_nc_mutex, &m_chan), m_taskmaster(&m_task_chan),
+          m_view(View::create(&m_nc_mutex, &m_model, tty)),
+          m_input(&m_nc_mutex, &m_chan, tty), m_taskmaster(&m_task_chan),
           m_highlight_active(true),
           m_caseless_mode(CaselessSearchMode::SENSITIVE) {
         register_for_sigwinch_channel(&m_chan);

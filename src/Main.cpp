@@ -345,15 +345,10 @@ int main(int argc, char **argv) {
                     argv[1]);
             exit(1);
         }
-        Main main{read_file};
+        FILE *tty = isatty(STDIN_FILENO) ? stdin : fopen("/dev/tty", "r");
+        Main main{read_file, tty};
         main.run();
     }
 
-    if (!isatty(0)) {
-        fprintf(stdout, "start reading from tty.\n");
-    } else {
-        fprintf(stderr, "missing filename.\n");
-        exit(0);
-    }
     return 0;
 }

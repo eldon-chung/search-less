@@ -42,14 +42,15 @@ struct View {
     std::string m_status;
     std::string m_command;
 
-    static View create(std::mutex *nc_mutex, const FileHandle *model) {
-        return View(nc_mutex, model);
+    static View create(std::mutex *nc_mutex, const FileHandle *model,
+                       FILE *tty) {
+        return View(nc_mutex, model, tty);
     }
 
   private:
-    View(std::mutex *nc_mutex, FileHandle const *model) {
+    View(std::mutex *nc_mutex, FileHandle const *model, FILE *tty) {
         std::scoped_lock lock(*nc_mutex);
-        initscr();
+        newterm(getenv("TERM"), stdout, tty);
         start_color();
         use_default_colors();
         noecho();
@@ -240,7 +241,7 @@ struct View {
         werase(m_command_window_ptr);
         wattrset(m_command_window_ptr, WA_NORMAL);
         mvwaddnstr(m_command_window_ptr, 0, 0, command.data(),
-                   command.length());
+                   std::min(command.length(), m_main_window_width));
 
         if (cursor_pos < std::numeric_limits<int>::max()) {
             mvwchgat(m_command_window_ptr, 0, (int)cursor_pos, (int)1,
@@ -253,7 +254,8 @@ struct View {
         std::scoped_lock lock(*m_nc_mutex);
         werase(m_command_window_ptr);
         wattrset(m_command_window_ptr, WA_STANDOUT);
-        mvwaddnstr(m_command_window_ptr, 0, 0, status.data(), status.length());
+        mvwaddnstr(m_command_window_ptr, 0, 0, status.data(),
+                   std::min(status.length(), m_main_window_width));
         wrefresh(m_command_window_ptr);
     }
 
@@ -263,6 +265,7 @@ struct View {
     }
 
     void handle_resize() {
+        std::scoped_lock lock(*m_nc_mutex);
         endwin();
         refresh();
 

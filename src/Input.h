@@ -30,9 +30,9 @@ struct InputThread {
 
     std::binary_semaphore fd_ready;
 
-    InputThread(std::mutex *nc_mutex, Channel<Command> *chan)
+    InputThread(std::mutex *nc_mutex, Channel<Command> *chan, FILE *tty)
         : nc_mutex(nc_mutex), chan(chan), fd_ready(0) {
-        devttyfd = open("/dev/tty", O_RDONLY);
+        devttyfd = fileno(tty);
         pollfds[0].fd = devttyfd;
         pollfds[0].events = POLLIN;
 
@@ -91,6 +91,9 @@ struct InputThread {
             }
 
             switch (ch) {
+            case KEY_RESIZE:
+                chan->push(Command{Command::RESIZE});
+                break;
             case 'q':
                 chan->push({Command::QUIT});
                 return; // Kill input thread
