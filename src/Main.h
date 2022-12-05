@@ -1,26 +1,26 @@
 #pragma once
 
+#include <algorithm>
+#include <filesystem>
+#include <functional>
+#include <future>
+#include <mutex>
 #include <ncurses.h>
 #include <signal.h>
 #include <stdio.h>
-#include <filesystem>
-#include <future>
-#include <mutex>
-#include <algorithm>
-#include <functional>
 #include <stop_token>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "Channel.h"
+#include "Command.h"
 #include "FileHandle.h"
 #include "Input.h"
+#include "PipeHandle.h"
 #include "View.h"
 #include "Worker.h"
 #include "search.h"
-#include "Channel.h"
-#include "Command.h"
-#include "PipeHandle.h"
 
 template <typename T> struct Main {
     Channel<Command> m_chan;
@@ -56,40 +56,14 @@ template <typename T> struct Main {
     size_t m_half_page_size;
     size_t m_page_size;
 
-    Main(std::filesystem::directory_entry file_de, FILE *tty,
-         std::string history_filename, int history_maxsize)
-        : m_model(FileHandle::initialize(file_de)),
-          m_view(View<T>::create(&m_nc_mutex, &m_model, tty)),
-          m_input(&m_nc_mutex, &m_chan, tty, std::move(history_filename),
-                  history_maxsize),
-          m_taskmaster(&m_task_chan), m_highlight_active(true),
-          m_caseless_mode(CaselessSearchMode::SENSITIVE) {
-        register_for_sigwinch_channel(&m_chan);
-
-        auto read_line_offsets_tasks = [&]() -> void {
-            compute_line_offsets(m_file_task_stop_source.get_token(), &m_chan,
-                                 m_file_task_promise, m_model.get_contents(),
-                                 0);
-        };
-        m_view.display_page_at({});
-        m_view.display_status(m_model.relative_path());
-        // schedule a line offset computation
-        m_task_chan.push(std::move(read_line_offsets_tasks));
-
-        m_half_page_size = std::max((size_t)1, m_view.m_main_window_height / 2);
-        m_page_size = std::max((size_t)1, m_view.m_main_window_height);
-    }
-
-    Main(int pipe_fd, FILE *tty, std::string history_filename,
+    Main(std::string path, int fd, FILE *tty, std::string history_filename,
          int history_maxsize)
-        : m_model(PipeHandle::initialize(pipe_fd)),
+        : m_model(T::initialize(path, fd)),
           m_view(View<T>::create(&m_nc_mutex, &m_model, tty)),
           m_input(&m_nc_mutex, &m_chan, tty, std::move(history_filename),
                   history_maxsize),
           m_taskmaster(&m_task_chan), m_highlight_active(true),
           m_caseless_mode(CaselessSearchMode::SENSITIVE) {
-
-        m_model.read_to_eof_into_temp();
 
         register_for_sigwinch_channel(&m_chan);
         auto read_line_offsets_tasks = [&]() -> void {

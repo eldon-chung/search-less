@@ -12,11 +12,14 @@
 
 class PipeHandle {
     FileHandle m_file_handle;
+    std::string m_path;
     int m_fd; // the pipe file des
 
   public:
-    PipeHandle(std::filesystem::directory_entry de, int fd, int temp_fd)
-        : m_file_handle(FileHandle::initialize(de, temp_fd)), m_fd(fd) {
+    PipeHandle(std::string path, int fd, int temp_fd)
+        : m_file_handle(FileHandle::initialize("", temp_fd)),
+          m_path(std::move(path)), m_fd(fd) {
+        read_to_eof_into_temp();
     }
 
     struct LineIt {
@@ -115,30 +118,19 @@ class PipeHandle {
     PipeHandle(PipeHandle const &other) = delete;
     PipeHandle &operator=(PipeHandle const &other) = delete;
 
-    PipeHandle(PipeHandle &&other)
-        : m_file_handle(std::move(other.m_file_handle)),
-          m_fd(std::exchange(other.m_fd, -1)) {
-    }
-    PipeHandle &operator=(PipeHandle &&other) {
-        PipeHandle temp{std::move(other)};
-        using std::swap;
-        swap(*this, temp);
-        return *this;
-    }
+    PipeHandle(PipeHandle &&other) = delete;
+    PipeHandle &operator=(PipeHandle &&other) = delete;
     ~PipeHandle() {
-        if (m_fd == -1) {
-            return;
-        }
         close(m_fd);
     }
 
-    friend void swap(PipeHandle &lhs, PipeHandle &rhs) {
-        using std::swap;
-        swap(lhs.m_file_handle, rhs.m_file_handle);
-        swap(lhs.m_fd, rhs.m_fd);
-    }
+    /* friend void swap(PipeHandle &lhs, PipeHandle &rhs) { */
+    /*     using std::swap; */
+    /*     swap(lhs.m_file_handle, rhs.m_file_handle); */
+    /*     swap(lhs.m_fd, rhs.m_fd); */
+    /* } */
 
-    static PipeHandle initialize(int fd) {
+    static PipeHandle initialize(std::string path, int fd) {
         // create a temp file
         char temp_filename[7] = "XXXXXX";
         int temp_fd = mkstemp(temp_filename);
@@ -147,9 +139,8 @@ class PipeHandle {
             exit(1);
         }
         unlink(temp_filename);
-        std::filesystem::directory_entry de{temp_filename};
 
-        return PipeHandle{de, fd, temp_fd};
+        return PipeHandle{std::move(path), fd, temp_fd};
     }
 
   public:
@@ -321,8 +312,8 @@ class PipeHandle {
         return m_file_handle.length();
     };
 
-    std::string relative_path() const {
-        return "/dev/tty";
+    std::string_view relative_path() const {
+        return m_path;
     }
 
     void update_line_idxs(const std::vector<size_t> &offsets) {

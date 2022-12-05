@@ -70,7 +70,7 @@ PKGCONFIG_LIBS += readline
 
 .PRECIOUS: $(PRECIOUS_TARGETS)
 
-ifneq ($(PKGCONFIG_LIBS), "")
+ifdef PKGCONFIG_LIBS
 CXXFLAGS += $(shell pkg-config --cflags $(PKGCONFIG_LIBS))
 CFLAGS += $(shell pkg-config --cflags $(PKGCONFIG_LIBS))
 LDFLAGS += $(shell pkg-config --libs $(PKGCONFIG_LIBS))

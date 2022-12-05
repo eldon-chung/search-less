@@ -25,62 +25,29 @@
 class FileHandle {
     // A model is a collection of lines, and possibly known or unknown line
     // numbers, computed lazily / asynchronously
-    std::filesystem::directory_entry m_de;
+    std::string m_path;
     std::string_view m_contents;
     std::vector<size_t> m_line_idxs;
     size_t m_num_processed_bytes;
     // should we be using string view?
     int m_fd;
 
-    FileHandle(std::filesystem::directory_entry de, std::string_view contents,
-               int fd)
-        : m_de(std::move(de)), m_contents(std::move(contents)),
-          m_num_processed_bytes(0), m_fd(fd) {
+    FileHandle(std::string path, int fd)
+        : m_path(std::move(path)), m_num_processed_bytes(0), m_fd(fd) {
+        read_to_eof();
     }
 
   public:
-    static FileHandle initialize(std::filesystem::directory_entry de) {
-        int fd = open(de.path().c_str(), O_RDONLY);
-        if (fd == -1) {
-            fprintf(stderr, "error opening file. %s\n", strerror(errno));
-            exit(1);
-        }
-
-        return initialize(std::move(de), fd);
-    }
-
-    static FileHandle initialize(std::filesystem::directory_entry de, int fd) {
-        // stat the file
-        struct stat statbuf;
-        fstat(fd, &statbuf);
-
-        // note: we might want MAP_SHARED with somethimg about msync
-        char *contents_ptr = (char *)mmap(NULL, (size_t)statbuf.st_size,
-                                          PROT_READ, MAP_PRIVATE, fd, 0);
-
-        std::string_view contents{contents_ptr, (size_t)statbuf.st_size};
-        return FileHandle(std::move(de), contents, fd);
+    static FileHandle initialize(std::string path, int fd) {
+        return FileHandle(std::move(path), fd);
     }
     FileHandle(FileHandle const &) = delete;
     FileHandle &operator=(FileHandle const &) = delete;
-    FileHandle(FileHandle &&other)
-        : m_de(std::move(other.m_de)), m_contents(std::move(other.m_contents)),
-          m_line_idxs(std::move(other.m_line_idxs)),
-          m_num_processed_bytes(std::move(other.m_num_processed_bytes)),
-          m_fd(std::exchange(other.m_fd, -1)) {
-    }
-    FileHandle &operator=(FileHandle &&other) {
-        FileHandle temp{std::move(other)};
-        using std::swap;
-        swap(*this, temp);
-        return *this;
-    }
+    FileHandle(FileHandle &&other) = delete;
+    FileHandle &operator=(FileHandle &&other) = delete;
     ~FileHandle() {
-
-        if (m_fd == -1) {
-            return;
-        }
         munmap((void *)m_contents.data(), m_contents.size());
+        close(m_fd);
     }
 
     struct LineIt {
@@ -256,7 +223,9 @@ class FileHandle {
             return size_diff;
         }
 
-        munmap((void *)m_contents.data(), m_contents.size());
+        if (m_contents.data()) {
+            munmap((void *)m_contents.data(), m_contents.size());
+        }
         char *contents_ptr = (char *)mmap(NULL, (size_t)statbuf.st_size,
                                           PROT_READ, MAP_PRIVATE, m_fd, 0);
         m_contents = std::string_view{contents_ptr, (size_t)statbuf.st_size};
@@ -268,8 +237,8 @@ class FileHandle {
         return m_contents.length();
     };
 
-    std::string relative_path() const {
-        return m_de.path().relative_path().string();
+    std::string_view relative_path() const {
+        return m_path;
     }
 
     void update_line_idxs(const std::vector<size_t> &offsets) {

@@ -1,12 +1,12 @@
 #include "Main.h"
 
+#include <charconv>
 #include <fcntl.h>
+#include <optional>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <charconv>
-#include <optional>
 #include <string_view>
+#include <unistd.h>
 
 #include "search.h"
 
@@ -44,7 +44,8 @@ template <typename T> void Main<T>::display_command_or_status() {
         m_view.display_command(m_command_str_buffer, m_command_cursor_pos);
     } else if (!m_status_str_buffer.empty()) {
         m_view.display_status(m_status_str_buffer);
-    } else if (!m_last_search_pattern.empty()) {
+    } else if (!m_last_search_pattern.empty() ||
+               m_model.relative_path().empty()) {
         m_view.display_command(":", 1);
     } else {
         m_view.display_status(m_model.relative_path());
@@ -388,52 +389,40 @@ int main(int argc, char **argv) {
                         history_maxsize_env + strlen(history_maxsize_env),
                         history_maxsize);
     }
+    FILE *tty = isatty(STDIN_FILENO) ? stdin : fopen("/dev/tty", "r");
 
+    std::string filename;
+    int fd;
     if (argc >= 2) {
         // try to open the file
-        std::filesystem::directory_entry read_file(argv[1]);
-
-        if (read_file.is_directory()) {
-            fprintf(stderr, "%s is a directory.\n", argv[1]);
-            exit(1);
-        } else if (!read_file.is_regular_file()) {
-            fprintf(stderr,
-                    "%s is not a regular file. We don't support opening "
-                    "non-regular files.\n",
-                    argv[1]);
-            exit(1);
+        filename = argv[1];
+        fd = open(argv[1], O_RDONLY);
+        if (fd == -1) {
+            fprintf(stderr, "%s: %s\n", argv[1], strerror(errno));
+            return 1;
         }
-        FILE *tty = isatty(STDIN_FILENO) ? stdin : fopen("/dev/tty", "r");
+    } else if (!isatty(STDIN_FILENO)) {
+        fd = STDIN_FILENO;
+    } else {
+        fprintf(stderr, "Missing filename\n");
+        return 1;
+    }
 
-        Main<FileHandle> main{read_file, tty, std::move(history_filename),
-                              history_maxsize};
+    struct stat statbuf;
+    if (fstat(fd, &statbuf) == -1) {
+        fprintf(stderr, "%s: fstat: %s\n", argv[1], strerror(errno));
+        return 1;
+    }
+
+    if (S_ISREG(statbuf.st_mode)) {
+        Main<FileHandle> main{std::move(filename), fd, tty,
+                              std::move(history_filename), history_maxsize};
+        main.run();
+        return 0;
+    } else {
+        Main<PipeHandle> main{std::move(filename), fd, tty,
+                              std::move(history_filename), history_maxsize};
         main.run();
         return 0;
     }
-
-    if (!isatty(0)) {
-        int pipe_fd = dup(0);
-        if (pipe_fd == -1) {
-            fprintf(stderr, "Error duping stdin %s\n", strerror(pipe_fd));
-            exit(1);
-        }
-        int tty_fd = open("/dev/tty", O_RDONLY);
-        if (tty_fd == -1) {
-            fprintf(stderr, "Error opening /dev/tty %s\n", strerror(pipe_fd));
-            exit(1);
-        }
-        if (dup2(tty_fd, 0) == -1) {
-            fprintf(stderr, "Error duping tty_fd to 0 %s\n", strerror(pipe_fd));
-            exit(1);
-        }
-        FILE *tty = isatty(STDIN_FILENO) ? stdin : fopen("/dev/tty", "r");
-
-        Main<PipeHandle> main(pipe_fd, tty, std::move(history_filename),
-                              history_maxsize);
-        main.run();
-        return 0;
-    }
-
-    fprintf(stderr, "missing filename.\n");
-    return 1;
 }
