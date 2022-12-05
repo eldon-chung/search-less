@@ -99,4 +99,4 @@ bear:
 
 .PHONY: format;
 
--include $(BUILDDIR)/**/*.d
+-include $(OBJDIR)/**/*.d
