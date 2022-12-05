@@ -109,7 +109,6 @@ class FileHandle {
         Cursed operator->() const {
             return {**this};
         }
-
         FileHandle::LineIt &operator++() {
             if (m_length == 0) {
                 throw std::runtime_error("tried to go past past last line.\n");
@@ -133,7 +132,6 @@ class FileHandle {
             ++(*this);
             return to_return;
         }
-
         FileHandle::LineIt &operator--() {
             if (m_offset == 0) {
                 throw std::runtime_error("Tried to go behind first line.\n");
