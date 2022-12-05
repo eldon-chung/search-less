@@ -27,17 +27,13 @@ struct InputThread {
 
     std::string pattern_buf = "";
     uint16_t cursor_pos = 0;
+    std::string history_filename;
+    int history_maxsize;
 
     std::binary_semaphore fd_ready;
 
-    InputThread(std::mutex *nc_mutex, Channel<Command> *chan, FILE *tty)
-        : nc_mutex(nc_mutex), chan(chan), fd_ready(0) {
-        devttyfd = fileno(tty);
-        pollfds[0].fd = devttyfd;
-        pollfds[0].events = POLLIN;
-
-        t = std::thread(&InputThread::start, this);
-    }
+    InputThread(std::mutex *nc_mutex, Channel<Command> *chan, FILE *tty,
+                std::string history_filename, int history_maxsize);
 
     InputThread(const InputThread &) = delete;
     InputThread &operator=(const InputThread &) = delete;

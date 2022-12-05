@@ -361,6 +361,24 @@ template <typename T> void Main<T>::run() {
 
 int main(int argc, char **argv) {
 
+    const char *history_filename_env = getenv("SEARCHLESSHISTFILE");
+    std::string history_filename;
+    if (history_filename_env && *history_filename_env) {
+        history_filename = history_filename_env;
+    } else {
+        const char *home = getenv("HOME");
+        if (home) {
+            history_filename = std::string(home) + "/.searchlesshst";
+        }
+    }
+    const char *history_maxsize_env = getenv("SEARCHLESSHISTSIZE");
+    int history_maxsize = 100;
+    if (history_maxsize_env && *history_maxsize_env) {
+        std::from_chars(history_maxsize_env,
+                        history_maxsize_env + strlen(history_maxsize_env),
+                        history_maxsize);
+    }
+
     if (argc >= 2) {
         // try to open the file
         std::filesystem::directory_entry read_file(argv[1]);
@@ -376,8 +394,11 @@ int main(int argc, char **argv) {
             exit(1);
         }
         FILE *tty = isatty(STDIN_FILENO) ? stdin : fopen("/dev/tty", "r");
-        Main<FileHandle> main{read_file, tty};
+
+        Main<FileHandle> main{read_file, tty, std::move(history_filename),
+                              history_maxsize};
         main.run();
+        return 0;
     }
 
     if (!isatty(0)) {
@@ -396,12 +417,13 @@ int main(int argc, char **argv) {
             exit(1);
         }
         FILE *tty = isatty(STDIN_FILENO) ? stdin : fopen("/dev/tty", "r");
-        Main<PipeHandle> main(pipe_fd, tty);
+
+        Main<PipeHandle> main(pipe_fd, tty, std::move(history_filename),
+                              history_maxsize);
         main.run();
         return 0;
-    } else {
-        fprintf(stderr, "missing filename.\n");
-        exit(0);
     }
-    return 0;
+
+    fprintf(stderr, "missing filename.\n");
+    return 1;
 }

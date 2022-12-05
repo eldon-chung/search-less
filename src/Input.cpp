@@ -3,6 +3,8 @@
 #include <readline/history.h>
 #include <readline/readline.h>
 
+#include <sys/stat.h>
+
 #include "Command.h"
 #include "Input.h"
 
@@ -15,6 +17,48 @@ void handle_sigwinch(int) {
 void register_for_sigwinch_channel(Channel<Command> *to_register) {
     command_channel = to_register;
     signal(SIGWINCH, handle_sigwinch);
+}
+
+InputThread::InputThread(std::mutex *nc_mutex, Channel<Command> *chan,
+                         FILE *tty, std::string _history_filename,
+                         int history_maxsize)
+    : nc_mutex(nc_mutex), chan(chan),
+      history_filename(std::move(_history_filename)),
+      history_maxsize(history_maxsize), fd_ready(0) {
+    if (read_history(history_filename.c_str())) {
+        struct stat stats;
+        int res = stat(history_filename.c_str(), &stats);
+        if (res == -1 && errno == ENOENT) {
+            // read_history because the history file doesn't exist, create it
+            // and try again.
+            // create file with mode 600 (octal)
+            int fd = creat(history_filename.c_str(), 0600);
+            if (fd != -1) {
+                close(fd);
+            }
+            if (read_history(history_filename.c_str())) {
+                // creating the file didn't help
+                chan->push(
+                    Command{Command::DISPLAY_STATUS,
+                            "There was a problem reading the history file, "
+                            "not using history this session."});
+                history_filename.clear();
+            }
+        } else {
+            // stat worked or errored for some OTHER reason.
+            // this is unusual because the read_history call failed, so we're
+            // just going to give up.
+            chan->push(Command{Command::DISPLAY_STATUS,
+                               "There was a problem reading the history file, "
+                               "not using history this session."});
+            history_filename.clear();
+        }
+    }
+    devttyfd = fileno(tty);
+    pollfds[0].fd = devttyfd;
+    pollfds[0].events = POLLIN;
+
+    t = std::thread(&InputThread::start, this);
 }
 
 std::optional<std::string> readline_result;
@@ -92,6 +136,8 @@ void InputThread::multi_char_search(size_t num_payload) {
         command_channel->push(Command{Command::SEARCH_QUIT});
     } else {
         add_history(readline_result->c_str());
+        append_history(1, history_filename.c_str());
+        history_truncate_file(history_filename.c_str(), history_maxsize);
         command_channel->push(Command{Command::SEARCH_EXEC,
                                       std::move(*readline_result),
                                       {},

@@ -47,11 +47,13 @@ template <typename T> struct Main {
     size_t m_half_page_size;
     size_t m_page_size;
 
-    Main(std::filesystem::directory_entry file_de, FILE *tty)
+    Main(std::filesystem::directory_entry file_de, FILE *tty,
+         std::string history_filename, int history_maxsize)
         : m_model(FileHandle::initialize(file_de)),
           m_view(View<T>::create(&m_nc_mutex, &m_model, tty)),
-          m_input(&m_nc_mutex, &m_chan, tty), m_taskmaster(&m_task_chan),
-          m_highlight_active(true),
+          m_input(&m_nc_mutex, &m_chan, tty, std::move(history_filename),
+                  history_maxsize),
+          m_taskmaster(&m_task_chan), m_highlight_active(true),
           m_caseless_mode(CaselessSearchMode::SENSITIVE) {
         register_for_sigwinch_channel(&m_chan);
 
@@ -69,11 +71,13 @@ template <typename T> struct Main {
         m_page_size = std::max((size_t)1, m_view.m_main_window_height);
     }
 
-    Main(int pipe_fd, FILE *tty)
+    Main(int pipe_fd, FILE *tty, std::string history_filename,
+         int history_maxsize)
         : m_model(PipeHandle::initialize(pipe_fd)),
           m_view(View<T>::create(&m_nc_mutex, &m_model, tty)),
-          m_input(&m_nc_mutex, &m_chan, tty), m_taskmaster(&m_task_chan),
-          m_highlight_active(true),
+          m_input(&m_nc_mutex, &m_chan, tty, std::move(history_filename),
+                  history_maxsize),
+          m_taskmaster(&m_task_chan), m_highlight_active(true),
           m_caseless_mode(CaselessSearchMode::SENSITIVE) {
 
         m_model.read_to_eof_into_temp();
