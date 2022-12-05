@@ -92,6 +92,11 @@ clean: Makefile
 format:
 	clang-format -i $(SRCS)
 
+BEAR := bear
+bear:
+	$(MAKE) clean
+	$(BEAR) -- $(MAKE)
+
 .PHONY: format;
 
 -include $(BUILDDIR)/**/*.d
