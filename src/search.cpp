@@ -1,5 +1,8 @@
 #include "search.h"
+
 #include <cstring>
+#include <algorithm>
+#include <string>
 
 void tolower(const char *s, const char *end, char *out) {
     std::transform(s, end, out, [](char c) {

@@ -1,5 +1,12 @@
 #include "Worker.h"
 
+#include <sys/types.h>
+#include <algorithm>
+#include <string>
+#include <vector>
+
+#include "Command.h"
+
 void compute_line_offsets(std::stop_token stop, Channel<Command> *chan,
                           std::promise<void> &promise,
                           std::string_view contents, size_t starting_offset) {

@@ -1,18 +1,22 @@
 #pragma once
 
 #include <assert.h>
-#include <cctype>
 #include <fcntl.h>
+#include <poll.h>
+#include <signal.h>
+#include <cctype>
 #include <future>
 #include <mutex>
 #include <optional>
-#include <poll.h>
-#include <signal.h>
 #include <stop_token>
 #include <thread>
+#include <functional>
+#include <string_view>
 
 #include "Channel.h"
 #include "Command.h"
+
+struct Command;
 
 struct WorkerThread {
     Channel<std::function<void(void)>> *task_chan;

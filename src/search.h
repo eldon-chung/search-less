@@ -1,7 +1,7 @@
 #pragma once
 
-#include <functional>
 #include <stddef.h>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>

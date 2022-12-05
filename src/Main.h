@@ -1,17 +1,26 @@
 #pragma once
 
-#include <filesystem>
-#include <future>
-#include <mutex>
 #include <ncurses.h>
 #include <signal.h>
 #include <stdio.h>
+#include <filesystem>
+#include <future>
+#include <mutex>
+#include <algorithm>
+#include <functional>
+#include <stop_token>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "FileHandle.h"
 #include "Input.h"
 #include "View.h"
 #include "Worker.h"
 #include "search.h"
+#include "Channel.h"
+#include "Command.h"
+#include "PipeHandle.h"
 
 template <typename T> struct Main {
     Channel<Command> m_chan;

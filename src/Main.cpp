@@ -1,5 +1,15 @@
 #include "Main.h"
 
+#include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <charconv>
+#include <optional>
+#include <string_view>
+
+#include "search.h"
+
 // is this good? the member fields now sort of behave like
 // "scoped globals" in this way. perhaps we should make
 // this a static method that takes in params

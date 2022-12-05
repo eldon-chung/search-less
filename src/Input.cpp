@@ -1,9 +1,12 @@
 #include <stdio.h>
-
 #include <readline/history.h>
 #include <readline/readline.h>
-
 #include <sys/stat.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <optional>
+#include <utility>
 
 #include "Command.h"
 #include "Input.h"
