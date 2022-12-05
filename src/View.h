@@ -181,12 +181,12 @@ template <typename T> struct View {
             if (page_lines_it != page.end()) {
                 std::string display_string(
                     strip_trailing_rn(page_lines_it.get_contents()));
-                mvwaddstr(m_main_window_ptr, display_row, 0,
+                mvwaddstr(m_main_window_ptr, (int)display_row, 0,
                           display_string.c_str());
                 ++page_lines_it;
 
             } else {
-                mvwaddnstr(m_main_window_ptr, display_row, 0, "~", 1);
+                mvwaddnstr(m_main_window_ptr, (int)display_row, 0, "~", 1);
             }
         }
 
@@ -230,7 +230,7 @@ template <typename T> struct View {
         werase(m_command_window_ptr);
         wattrset(m_command_window_ptr, WA_NORMAL);
         mvwaddnstr(m_command_window_ptr, 0, 0, command.data(),
-                   std::min(command.length(), m_main_window_width));
+                   (int)std::min(command.length(), m_main_window_width));
 
         if (cursor_pos < std::numeric_limits<int>::max()) {
             mvwchgat(m_command_window_ptr, 0, (int)cursor_pos, (int)1,
@@ -244,7 +244,7 @@ template <typename T> struct View {
         werase(m_command_window_ptr);
         wattrset(m_command_window_ptr, WA_STANDOUT);
         mvwaddnstr(m_command_window_ptr, 0, 0, status.data(),
-                   std::min(status.length(), m_main_window_width));
+                   (int)std::min(status.length(), m_main_window_width));
         wrefresh(m_command_window_ptr);
     }
 

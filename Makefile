@@ -12,13 +12,14 @@ endif
 CXXWARNINGS := -Wall -Wextra -pedantic -Wimplicit-fallthrough
 CXXWERROR := -Werror
 CXXWERROR += -Wno-error=unused-parameter
+ifeq ($(CXX), clang++)
 CXXWERROR += -Wno-error=unused-private-field
+endif
 CXXWERROR += -Wno-error=unused-variable
 CXXWERROR += -Wno-error=unused-function
 CXXWERROR += -Wconversion
-CXXWERROR += -Wtautological-constant-out-of-range-compare
 CXXWERROR += -Wno-unused-but-set-variable
-CXXFLAGS := -g -std=c++20 -Isrc -ftime-trace -fno-omit-frame-pointer
+CXXFLAGS := -g -std=c++20 -Isrc -fno-omit-frame-pointer
 ifeq ($(SANITIZE), 1)
 CXXFLAGS += -fsanitize=thread
 endif
@@ -26,24 +27,22 @@ CXXFLAGS += $(CXXOPT)
 CXXFLAGS += $(CXXWARNINGS)
 CXXFLAGS += $(CXXWERROR)
 
-# build dir
-ifeq ($(DEBUG), 1)
+# build and object dir
 BUILDDIR := build
-else
-BUILDDIR := build-release
+OBJDIR := $(BUILDDIR)/objs-$(CXX)
+ifneq ($(DEBUG), 1)
+OBJDIR := $(OBJDIR)-release
 endif
-$(BUILDDIR):
-	mkdir -p $(BUILDDIR)
 PRECIOUS_TARGETS += $(BUILDDIR)
 
 # sources
 SRCS := $(shell find src -iname "*.cpp")
-OBJS := $(SRCS:%.cpp=$(BUILDDIR)/%.o)
+OBJS := $(SRCS:%.cpp=$(OBJDIR)/%.o)
 
-$(BUILDDIR)/%.o: %.cpp Makefile
+$(OBJDIR)/%.o: %.cpp Makefile
 	mkdir -p $(shell dirname $@)
-	$(COMPILE.cpp) $(@:$(BUILDDIR)/%.o=%.cpp) -MMD $(OUTPUT_OPTION)
-PRECIOUS_TARGETS += $(BUILDDIR)/%.o
+	$(COMPILE.cpp) $(@:$(OBJDIR)/%.o=%.cpp) -MMD $(OUTPUT_OPTION)
+PRECIOUS_TARGETS += $(OBJDIR)/%.o
 
 # Example: adding absl_hash
 # PKGCONFIG_LIBS += absl_hash
@@ -84,7 +83,6 @@ $(BUILDDIR)/main.out: $(OBJS) Makefile
 	$(LINK.cpp) $(OBJS) -MMD $(LDLIBS) $(OUTPUT_OPTION)
 
 my_all: $(BUILDDIR)/main.out;
-# elditor: $(BUILDDIR)/elditor.out;
 
 # test: $(BUILDDIR)/test.out;
 
