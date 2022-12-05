@@ -19,7 +19,6 @@ class PipeHandle {
     PipeHandle(std::string path, int fd, int temp_fd)
         : m_file_handle(FileHandle::initialize("", temp_fd)),
           m_path(std::move(path)), m_fd(fd) {
-        read_into_temp();
     }
 
     struct LineIt {
@@ -171,14 +170,19 @@ class PipeHandle {
     // returns false if read to EOF without a newline
     bool read_to_newl_into_temp() {
         ssize_t num_read = 0;
-        size_t found_pos = std::string::npos;
+        size_t last_line_offset =
+            m_file_handle.length() > 0
+                ? (--m_file_handle.end()).line_begin_offset()
+                : 0;
         do {
             num_read = read_into_temp();
-            FileHandle::LineIt last_line = --m_file_handle.end();
-            found_pos = last_line->find_first_of("\n");
-        } while (num_read != 0 && found_pos == std::string::npos);
+            if (m_file_handle.get_line_at_byte_offset(last_line_offset)
+                    ->ends_with('\n')) {
+                return true;
+            }
+        } while (num_read != 0);
 
-        return found_pos != std::string::npos;
+        return false;
     }
 
     PipeHandle::LineIt begin() {
@@ -253,7 +257,8 @@ class PipeHandle {
         size_t curr_length = m_file_handle.length();
         ssize_t byte_diff = (ssize_t)(byte_offset - curr_length);
         if (byte_diff >= 0) {
-            read_into_temp((size_t)byte_diff + 1);
+            read_into_temp((size_t)byte_diff);
+            read_to_newl_into_temp();
         }
 
         FileHandle::LineIt fh_line_it =
