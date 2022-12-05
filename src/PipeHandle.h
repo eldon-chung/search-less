@@ -57,17 +57,17 @@ class PipeHandle {
             // if at last line, we return sentinel
             auto next = m_file_line_it;
             if (m_is_eof) {
+                assert(m_file_line_it->length() == 0);
                 return *this;
             }
 
-            if (next->length() == 0) {
-                throw std::runtime_error(
-                    "PipeHandle::LineIt should have set this to eof\n");
-            }
+            assert(m_file_line_it->length() != 0);
 
             // if we are at the last line
             if ((++next)->length() == 0 || m_going_into_eof) {
                 m_is_eof = true;
+                ++m_file_line_it;
+                assert(m_file_line_it->length() == 0);
                 return *this;
             }
 
@@ -88,7 +88,12 @@ class PipeHandle {
         }
         LineIt &operator--() {
             --m_file_line_it;
-            m_going_into_eof = false;
+            if (m_is_eof) {
+                m_is_eof = false;
+                m_going_into_eof = true;
+            } else {
+                m_going_into_eof = false;
+            }
             return *this;
         }
         LineIt operator--(int) {
