@@ -16,6 +16,10 @@
 template <typename T> void Main<T>::update_screen_highlight_offsets() {
     // search all of the occurences of the pattern
     // that are visible on the screen right now.
+    if (m_view.get_starting_offset() >= m_model.length()) {
+        m_highlight_offsets.clear();
+        return;
+    }
     auto result_offsets = basic_search_all(
         m_model.get_contents(), m_last_search_pattern,
         m_view.get_starting_offset(), m_view.get_ending_offset(),

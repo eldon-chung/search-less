@@ -19,7 +19,7 @@ class PipeHandle {
     PipeHandle(std::string path, int fd, int temp_fd)
         : m_file_handle(FileHandle::initialize("", temp_fd)),
           m_path(std::move(path)), m_fd(fd) {
-        read_to_eof_into_temp();
+        read_into_temp();
     }
 
     struct LineIt {
@@ -124,12 +124,6 @@ class PipeHandle {
         close(m_fd);
     }
 
-    /* friend void swap(PipeHandle &lhs, PipeHandle &rhs) { */
-    /*     using std::swap; */
-    /*     swap(lhs.m_file_handle, rhs.m_file_handle); */
-    /*     swap(lhs.m_fd, rhs.m_fd); */
-    /* } */
-
     static PipeHandle initialize(std::string path, int fd) {
         // create a temp file
         char temp_filename[7] = "XXXXXX";
@@ -154,6 +148,10 @@ class PipeHandle {
             return 0;
         }
         if (ret_val == -1) {
+            if (errno == EAGAIN) {
+                // this is actually fine, we'll try again
+                return read_into_temp(num_to_read);
+            }
             fprintf(stderr, "PipeHandle error splicing. %s\n", strerror(errno));
             exit(1);
         }
@@ -288,15 +286,6 @@ class PipeHandle {
 
     size_t get_num_processed_bytes() const {
         return m_file_handle.get_num_processed_bytes();
-    }
-
-    ssize_t read_n_more_bytes(size_t num_read) {
-        ssize_t size_diff = num_byte_diff();
-        if (size_diff <= 0) {
-            return size_diff;
-        }
-        read_into_temp(num_read);
-        return size_diff;
     }
 
     ssize_t read_to_eof() {
