@@ -31,16 +31,12 @@ void Main::display_page() {
 
 void Main::display_command_or_status() {
     if (!m_command_str_buffer.empty()) {
-        fprintf(stderr, "0\n");
         m_view.display_command(m_command_str_buffer, m_command_cursor_pos);
     } else if (!m_status_str_buffer.empty()) {
-        fprintf(stderr, "1\n");
         m_view.display_status(m_status_str_buffer);
     } else if (!m_last_search_pattern.empty()) {
-        fprintf(stderr, "2\n");
         m_view.display_command(":", 1);
     } else {
-        fprintf(stderr, "3\n");
         m_view.display_status(m_model.relative_path());
     }
 }
