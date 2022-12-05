@@ -15,6 +15,7 @@
 #include "Cursor.h"
 #include "FileHandle.h"
 #include "Page.h"
+#include "PipeHandle.h"
 
 inline std::string_view strip_trailing_rn(std::string_view str) {
     size_t last_non_newline_char = str.find_last_not_of("\r\n");
@@ -28,24 +29,26 @@ inline std::string_view strip_trailing_rn(std::string_view str) {
 // Serves as the driver for the entire view. For now let's keep it at a simple
 //  thing that just holds a text_window, and given the state that needs to be
 //  rendered drives the entire rendering logic
-struct View {
+template <typename T> struct View {
     std::mutex *m_nc_mutex;
     WINDOW *m_main_window_ptr;
     WINDOW *m_command_window_ptr;
     size_t m_main_window_height;
     size_t m_main_window_width;
 
-    FileHandle const *m_model;
+    T *m_model;
     size_t m_offset;
     bool m_wrap_lines;
 
-    static View create(std::mutex *nc_mutex, const FileHandle *model,
-                       FILE *tty) {
+    std::string m_status;
+    std::string m_command;
+
+    static View create(std::mutex *nc_mutex, T *model, FILE *tty) {
         return View(nc_mutex, model, tty);
     }
 
   private:
-    View(std::mutex *nc_mutex, FileHandle const *model, FILE *tty) {
+    View(std::mutex *nc_mutex, T *model, FILE *tty) {
         std::scoped_lock lock(*nc_mutex);
         newterm(getenv("TERM"), stdout, tty);
         start_color();
@@ -93,15 +96,15 @@ struct View {
         endwin(); // here's how you finish up ncurses mode
     }
 
-    Page current_page() const {
-        return Page::get_page_at_byte_offset(m_model, m_offset,
-                                             m_main_window_height,
-                                             m_main_window_width, m_wrap_lines);
+    Page<T> current_page() const {
+        return Page<T>::get_page_at_byte_offset(
+            m_model, m_offset, m_main_window_height, m_main_window_width,
+            m_wrap_lines);
     }
 
     void scroll_up(size_t num_scrolls = 1) {
-        Page page = current_page();
-        Page::LineIt line = page.begin();
+        Page<T> page = current_page();
+        typename Page<T>::LineIt line = page.begin();
         while (num_scrolls-- > 0 && line.has_prev()) {
             --line;
         }
@@ -109,8 +112,8 @@ struct View {
     }
 
     void scroll_down(size_t num_scrolls = 1) {
-        Page page = current_page();
-        Page::LineIt line = page.begin();
+        Page<T> page = current_page();
+        typename Page<T>::LineIt line = page.begin();
         while (num_scrolls-- > 0 && line.has_next()) {
             ++line;
         }
@@ -126,7 +129,7 @@ struct View {
     }
 
     void move_to_byte_offset(size_t offset) {
-        Cursor cursor = Cursor::get_cursor_at_byte_offset(m_model, offset);
+        Cursor cursor = Cursor<T>::get_cursor_at_byte_offset(m_model, offset);
         if (m_wrap_lines) {
             cursor = cursor.round_to_wrapped_line(m_main_window_width);
         }
@@ -134,12 +137,12 @@ struct View {
     }
 
     size_t get_starting_offset() const {
-        Page page = current_page();
+        Page<T> page = current_page();
         return page.begin().get_begin_offset();
     }
 
     size_t get_ending_offset() const {
-        Page page = current_page();
+        Page<T> page = current_page();
         return page.end().get_begin_offset();
     }
 
@@ -170,7 +173,7 @@ struct View {
 
         werase(m_main_window_ptr);
 
-        Page page = current_page();
+        Page<T> page = current_page();
 
         auto page_lines_it = page.begin();
         for (size_t display_row = 0; display_row < m_main_window_height;
@@ -181,6 +184,7 @@ struct View {
                 mvwaddstr(m_main_window_ptr, display_row, 0,
                           display_string.c_str());
                 ++page_lines_it;
+
             } else {
                 mvwaddnstr(m_main_window_ptr, display_row, 0, "~", 1);
             }

@@ -6,11 +6,11 @@
 #include "Cursor.h"
 
 // Easily invalidated! Do not store long term!
-struct Page {
+template <typename T> struct Page {
     // Note that these LineIt iterators are easily invalidated, do not store
     // long term!
     struct LineIt {
-        Cursor m_cursor;
+        Cursor<T> m_cursor;
         size_t m_width;
         bool m_wrap_lines;
 
@@ -83,10 +83,12 @@ struct Page {
     LineIt m_begin;
     LineIt m_end;
 
-    static Page get_page_at_byte_offset(FileHandle const *model, size_t offset,
-                                        size_t height, size_t width,
-                                        bool wrap_lines) {
-        Cursor start_cursor = Cursor::get_cursor_at_byte_offset(model, offset);
+    static Page<T> get_page_at_byte_offset(T *model, size_t offset,
+                                           size_t height, size_t width,
+                                           bool wrap_lines) {
+        Cursor<T> start_cursor =
+            Cursor<T>::get_cursor_at_byte_offset(model, offset);
+
         if (wrap_lines) {
             start_cursor = start_cursor.round_to_wrapped_line(width);
         }

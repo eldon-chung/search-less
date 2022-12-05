@@ -13,7 +13,7 @@
 #include "Worker.h"
 #include "search.h"
 
-struct Main {
+template <typename T> struct Main {
     Channel<Command> m_chan;
     Channel<std::function<void(void)>> m_task_chan;
 
@@ -22,8 +22,8 @@ struct Main {
 
     std::mutex m_nc_mutex;
 
-    FileHandle m_model;
-    View m_view;
+    T m_model;
+    View<T> m_view;
 
     InputThread m_input;
     WorkerThread m_taskmaster;
@@ -41,20 +41,44 @@ struct Main {
     std::string m_command_str_buffer;
     size_t m_command_cursor_pos;
 
-    std::vector<View::Highlight> m_highlight_offsets;
+    std::vector<typename View<T>::Highlight> m_highlight_offsets;
     std::string m_last_search_pattern;
 
     size_t m_half_page_size;
     size_t m_page_size;
 
     Main(std::filesystem::directory_entry file_de, FILE *tty)
-        : m_model(FileHandle::initialize(std::move(file_de))),
-          m_view(View::create(&m_nc_mutex, &m_model, tty)),
+        : m_model(FileHandle::initialize(file_de)),
+          m_view(View<T>::create(&m_nc_mutex, &m_model, tty)),
           m_input(&m_nc_mutex, &m_chan, tty), m_taskmaster(&m_task_chan),
           m_highlight_active(true),
           m_caseless_mode(CaselessSearchMode::SENSITIVE) {
         register_for_sigwinch_channel(&m_chan);
 
+        auto read_line_offsets_tasks = [&]() -> void {
+            compute_line_offsets(m_file_task_stop_source.get_token(), &m_chan,
+                                 m_file_task_promise, m_model.get_contents(),
+                                 0);
+        };
+        m_view.display_page_at({});
+        m_view.display_status(m_model.relative_path());
+        // schedule a line offset computation
+        m_task_chan.push(std::move(read_line_offsets_tasks));
+
+        m_half_page_size = std::max((size_t)1, m_view.m_main_window_height / 2);
+        m_page_size = std::max((size_t)1, m_view.m_main_window_height);
+    }
+
+    Main(int pipe_fd, FILE *tty)
+        : m_model(PipeHandle::initialize(pipe_fd)),
+          m_view(View<T>::create(&m_nc_mutex, &m_model, tty)),
+          m_input(&m_nc_mutex, &m_chan, tty), m_taskmaster(&m_task_chan),
+          m_highlight_active(true),
+          m_caseless_mode(CaselessSearchMode::SENSITIVE) {
+
+        m_model.read_to_eof_into_temp();
+
+        register_for_sigwinch_channel(&m_chan);
         auto read_line_offsets_tasks = [&]() -> void {
             compute_line_offsets(m_file_task_stop_source.get_token(), &m_chan,
                                  m_file_task_promise, m_model.get_contents(),

@@ -3,7 +3,7 @@
 // is this good? the member fields now sort of behave like
 // "scoped globals" in this way. perhaps we should make
 // this a static method that takes in params
-void Main::update_screen_highlight_offsets() {
+template <typename T> void Main<T>::update_screen_highlight_offsets() {
     // search all of the occurences of the pattern
     // that are visible on the screen right now.
     auto result_offsets = basic_search_all(
@@ -20,7 +20,7 @@ void Main::update_screen_highlight_offsets() {
     }
 }
 
-void Main::display_page() {
+template <typename T> void Main<T>::display_page() {
     if (m_highlight_active) {
         update_screen_highlight_offsets();
         m_view.display_page_at(m_highlight_offsets);
@@ -29,7 +29,7 @@ void Main::display_page() {
     }
 }
 
-void Main::display_command_or_status() {
+template <typename T> void Main<T>::display_command_or_status() {
     if (!m_command_str_buffer.empty()) {
         m_view.display_command(m_command_str_buffer, m_command_cursor_pos);
     } else if (!m_status_str_buffer.empty()) {
@@ -41,7 +41,7 @@ void Main::display_command_or_status() {
     }
 }
 
-void Main::run() {
+template <typename T> void Main<T>::run() {
 
     while (true) {
         Command command = m_chan.pop().value();
@@ -107,19 +107,25 @@ void Main::run() {
             if (m_model.has_changed()) {
                 // need to kill task if running
                 m_file_task_stop_source.request_stop();
-                m_file_task_promise.get_future().wait();
+                auto file_task_fut = m_file_task_promise.get_future();
+                if (file_task_fut.valid()) {
+                    file_task_fut.get();
+                }
                 m_model.read_to_eof();
 
-                // reset the stop source; schedule new task
+                // reset the stop source and promise; schedule new task
                 m_file_task_stop_source = std::stop_source();
+                m_file_task_promise = std::promise<void>();
                 auto read_line_offsets_tasks = [&]() -> void {
                     compute_line_offsets(m_file_task_stop_source.get_token(),
                                          &m_chan, m_file_task_promise,
                                          m_model.get_contents(),
                                          m_model.get_num_processed_bytes());
                 };
+
                 m_task_chan.push(read_line_offsets_tasks);
             }
+
             m_view.move_to_end();
             display_page();
             if (!m_status_str_buffer.empty()) {
@@ -370,9 +376,32 @@ int main(int argc, char **argv) {
             exit(1);
         }
         FILE *tty = isatty(STDIN_FILENO) ? stdin : fopen("/dev/tty", "r");
-        Main main{read_file, tty};
+        Main<FileHandle> main{read_file, tty};
         main.run();
     }
 
+    if (!isatty(0)) {
+        int pipe_fd = dup(0);
+        if (pipe_fd == -1) {
+            fprintf(stderr, "Error duping stdin %s\n", strerror(pipe_fd));
+            exit(1);
+        }
+        int tty_fd = open("/dev/tty", O_RDONLY);
+        if (tty_fd == -1) {
+            fprintf(stderr, "Error opening /dev/tty %s\n", strerror(pipe_fd));
+            exit(1);
+        }
+        if (dup2(tty_fd, 0) == -1) {
+            fprintf(stderr, "Error duping tty_fd to 0 %s\n", strerror(pipe_fd));
+            exit(1);
+        }
+        FILE *tty = isatty(STDIN_FILENO) ? stdin : fopen("/dev/tty", "r");
+        Main<PipeHandle> main(pipe_fd, tty);
+        main.run();
+        return 0;
+    } else {
+        fprintf(stderr, "missing filename.\n");
+        exit(0);
+    }
     return 0;
 }
