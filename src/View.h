@@ -103,6 +103,10 @@ struct View {
         return m_page;
     }
 
+    Page const &const_current_page() const {
+        return m_page;
+    }
+
     void scroll_up(size_t num_scrolls = 1) {
         while (num_scrolls-- > 0 && m_page.has_prev()) {
             m_page.scroll_up();
@@ -172,6 +176,7 @@ struct View {
         wstandend(m_main_window_ptr);
 
         // split the highlights based on row
+
         auto highlight_it = highlight_list.cbegin();
         const char *base_addr = m_content_handle->get_contents().data();
 
@@ -188,7 +193,7 @@ struct View {
 
             while (highlight_it != highlight_list.cend() &&
                    highlight_it->offset >= starting_offset &&
-                   highlight_it->offset < starting_offset + ending_offset) {
+                   highlight_it->offset < ending_offset) {
 
                 size_t highlight_len = std::min(
                     highlight_it->length,

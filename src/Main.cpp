@@ -14,6 +14,11 @@
 // "scoped globals" in this way. perhaps we should make
 // this a static method that takes in params
 void Main::update_screen_highlight_offsets() {
+
+    if (m_last_search_pattern.empty()) {
+        return;
+    }
+
     // search all of the occurences of the pattern
     // that are visible on the screen right now.
     if (m_view.get_starting_offset() >= m_content_handle->size()) {
@@ -206,34 +211,57 @@ void Main::run() {
             }
 
             std::string_view contents = m_content_handle->get_contents();
+            if (contents.empty()) {
+                break;
+            }
+
             // TODO: optimize?
+            // TODO: Should get nth match, not nth line containing matches
+            // TODO: should display "search cursor" so that multiple matches
+            // on the same line can be `n`d properly
+
+            // prepare the final value that we should be moving to
+
+            // size_t end_of_file_offset = contents.size();
             for (size_t i = 0; i < std::max((size_t)1, command.payload_num);
                  ++i) {
-                size_t right_bound = m_view.get_starting_offset();
-                size_t curr_line_end = m_view.current_page().get_begin_offset();
 
-                // figure out if there is one on our current line;
-                size_t first_match = basic_search_first(
-                    contents, m_last_search_pattern, right_bound, curr_line_end,
+                Page const &page = m_view.const_current_page();
+                size_t curr_line_match, prev_match;
+                std::string_view curr_line = page[0];
+
+                size_t curr_line_offset = page.get_begin_offset();
+                size_t curr_line_end = curr_line_offset + curr_line.size();
+
+                curr_line_match = basic_search_first(
+                    contents, m_last_search_pattern, curr_line_offset,
+                    curr_line_end,
                     m_caseless_mode != CaselessSearchMode::SENSITIVE);
 
-                // look for instances before us
-                size_t last_match = basic_search_last(
-                    contents, m_last_search_pattern, 0, right_bound,
+                prev_match = basic_search_last(
+                    contents, m_last_search_pattern, 0, curr_line_offset,
                     m_caseless_mode != CaselessSearchMode::SENSITIVE);
 
-                if (last_match == right_bound && first_match != curr_line_end) {
-                    // if there isnt another instance behind us, but there
-                    // is one instance on our line
-                    set_status("(TOP)");
+                if (prev_match == curr_line_offset &&
+                    curr_line_match != curr_line_end) {
+                    // we still have the one on the current line
+                    // don't move the screen
+                    set_status("(END)");
                     break;
-                } else if (last_match == right_bound) {
+                } else if (prev_match == curr_line_offset &&
+                           curr_line_match == curr_line_end) {
+                    // we have none
+                    // don't move the screen
                     set_status("Pattern not found");
-                    break;
                 } else {
-                    m_view.move_to_byte_offset(last_match);
+                    // we have something
+                    m_view.move_to_byte_offset(prev_match);
+                    if (!page.has_prev()) {
+                        break;
+                    }
                 }
             }
+            // what happens if there wasnt a match?
             display_page();
             break;
         }
@@ -252,30 +280,51 @@ void Main::run() {
             // use the most recent search pattern stored in
             // m_last_search_pattern
             std::string_view contents = m_content_handle->get_contents();
+            if (contents.empty()) {
+                break;
+            }
+
             // TODO: optimize?
             // TODO: Should get nth match, not nth line containing matches
             // TODO: should display "search cursor" so that multiple matches
             // on the same line can be `n`d properly
+
+            // we are guaranteed they will be initialised
+            size_t end_of_file_offset = contents.size();
             for (size_t i = 0; i < std::max((size_t)1, command.payload_num);
                  ++i) {
-                size_t left_bound = m_view.get_starting_offset();
-                size_t curr_line_end = m_view.current_page().get_end_offset();
-                size_t right_bound = contents.size();
 
-                size_t curr_line_match = basic_search_first(
-                    contents, m_last_search_pattern, left_bound, curr_line_end,
+                Page const &page = m_view.const_current_page();
+
+                size_t curr_line_match, next_match;
+                std::string_view curr_line = page[0];
+
+                size_t curr_line_offset = page.get_begin_offset();
+                size_t curr_line_end = curr_line_offset + curr_line.size();
+
+                curr_line_match = basic_search_first(
+                    contents, m_last_search_pattern, curr_line_offset,
+                    curr_line_end,
                     m_caseless_mode != CaselessSearchMode::SENSITIVE);
 
-                size_t next_match = basic_search_first(
-                    contents, m_last_search_pattern, curr_line_end, right_bound,
+                next_match = basic_search_first(
+                    contents, m_last_search_pattern, curr_line_end,
+                    end_of_file_offset,
                     m_caseless_mode != CaselessSearchMode::SENSITIVE);
 
-                if (next_match == right_bound &&
+                if (next_match == end_of_file_offset &&
                     curr_line_match != curr_line_end) {
                     set_status("(END)");
                     break;
+                } else if (next_match == end_of_file_offset &&
+                           curr_line_match == curr_line_end) {
+                    set_status("Pattern not found");
+                    break;
                 } else {
                     m_view.move_to_byte_offset(next_match);
+                    if (!page.has_next()) {
+                        break;
+                    }
                 }
             }
             display_page();
@@ -298,7 +347,6 @@ void Main::run() {
             size_t match = basic_search_first(
                 contents, m_last_search_pattern, left_bound, right_bound,
                 m_caseless_mode != CaselessSearchMode::SENSITIVE);
-
             // TODO: optimize
             for (size_t i = 1; i < command.payload_num; ++i) {
                 size_t cur_match = basic_search_first(
