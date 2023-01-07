@@ -13,15 +13,19 @@
 // is this good? the member fields now sort of behave like
 // "scoped globals" in this way. perhaps we should make
 // this a static method that takes in params
-template <typename T> void Main<T>::update_screen_highlight_offsets() {
+void Main::update_screen_highlight_offsets() {
     // search all of the occurences of the pattern
     // that are visible on the screen right now.
-    if (m_view.get_starting_offset() >= m_model.length()) {
+    if (m_view.get_starting_offset() >= m_content_handle->size()) {
         m_highlight_offsets.clear();
         return;
     }
+
+    fprintf(stderr, "update_screen_highlight_offsets: starting_offset %zu\n",
+            m_view.get_starting_offset());
+
     auto result_offsets = basic_search_all(
-        m_model.get_contents(), m_last_search_pattern,
+        m_content_handle->get_contents(), m_last_search_pattern,
         m_view.get_starting_offset(), m_view.get_ending_offset(),
         m_caseless_mode != CaselessSearchMode::SENSITIVE);
 
@@ -34,7 +38,7 @@ template <typename T> void Main<T>::update_screen_highlight_offsets() {
     }
 }
 
-template <typename T> void Main<T>::display_page() {
+void Main::display_page() {
     if (m_highlight_active) {
         update_screen_highlight_offsets();
         m_view.display_page_at(m_highlight_offsets);
@@ -43,20 +47,20 @@ template <typename T> void Main<T>::display_page() {
     }
 }
 
-template <typename T> void Main<T>::display_command_or_status() {
+void Main::display_command_or_status() {
     if (!m_command_str_buffer.empty()) {
         m_view.display_command(m_command_str_buffer, m_command_cursor_pos);
     } else if (!m_status_str_buffer.empty()) {
         m_view.display_status(m_status_str_buffer);
     } else if (!m_last_search_pattern.empty() ||
-               m_model.relative_path().empty()) {
+               m_content_handle->get_path().empty()) {
         m_view.display_command(":", 1);
     } else {
-        m_view.display_status(m_model.relative_path());
+        m_view.display_status(m_content_handle->get_path());
     }
 }
 
-template <typename T> void Main<T>::run() {
+void Main::run() {
 
     while (true) {
         Command command = m_chan.pop().value();
@@ -119,28 +123,6 @@ template <typename T> void Main<T>::run() {
             }
             break;
         case Command::VIEW_EOF:
-            if (m_model.has_changed()) {
-                // need to kill task if running
-                m_file_task_stop_source.request_stop();
-                auto file_task_fut = m_file_task_promise.get_future();
-                if (file_task_fut.valid()) {
-                    file_task_fut.get();
-                }
-                m_model.read_to_eof();
-
-                // reset the stop source and promise; schedule new task
-                m_file_task_stop_source = std::stop_source();
-                m_file_task_promise = std::promise<void>();
-                auto read_line_offsets_tasks = [&]() -> void {
-                    compute_line_offsets(m_file_task_stop_source.get_token(),
-                                         &m_chan, m_file_task_promise,
-                                         m_model.get_contents(),
-                                         m_model.get_num_processed_bytes());
-                };
-
-                m_task_chan.push(read_line_offsets_tasks);
-            }
-
             m_view.move_to_end();
             display_page();
             if (!m_status_str_buffer.empty()) {
@@ -226,13 +208,12 @@ template <typename T> void Main<T>::run() {
                 break;
             }
 
-            std::string_view contents = m_model.get_contents();
+            std::string_view contents = m_content_handle->get_contents();
             // TODO: optimize?
             for (size_t i = 0; i < std::max((size_t)1, command.payload_num);
                  ++i) {
                 size_t right_bound = m_view.get_starting_offset();
-                size_t curr_line_end =
-                    m_view.current_page().begin().get_end_offset();
+                size_t curr_line_end = m_view.current_page().get_begin_offset();
 
                 // figure out if there is one on our current line;
                 size_t first_match = basic_search_first(
@@ -273,7 +254,7 @@ template <typename T> void Main<T>::run() {
 
             // use the most recent search pattern stored in
             // m_last_search_pattern
-            std::string_view contents = m_model.get_contents();
+            std::string_view contents = m_content_handle->get_contents();
             // TODO: optimize?
             // TODO: Should get nth match, not nth line containing matches
             // TODO: should display "search cursor" so that multiple matches
@@ -281,8 +262,7 @@ template <typename T> void Main<T>::run() {
             for (size_t i = 0; i < std::max((size_t)1, command.payload_num);
                  ++i) {
                 size_t left_bound = m_view.get_starting_offset();
-                size_t curr_line_end =
-                    m_view.current_page().begin().get_end_offset();
+                size_t curr_line_end = m_view.current_page().get_end_offset();
                 size_t right_bound = contents.size();
 
                 size_t curr_line_match = basic_search_first(
@@ -310,7 +290,7 @@ template <typename T> void Main<T>::run() {
             set_status("");
             m_highlight_active = true;
 
-            std::string_view contents = m_model.get_contents();
+            std::string_view contents = m_content_handle->get_contents();
 
             // update the search pattern
             m_last_search_pattern = std::string{command.payload_str.begin(),
@@ -321,6 +301,7 @@ template <typename T> void Main<T>::run() {
             size_t match = basic_search_first(
                 contents, m_last_search_pattern, left_bound, right_bound,
                 m_caseless_mode != CaselessSearchMode::SENSITIVE);
+            fprintf(stderr, "search_search: match value %zu\n", match);
             // TODO: optimize
             for (size_t i = 1; i < command.payload_num; ++i) {
                 size_t cur_match = basic_search_first(
@@ -332,7 +313,8 @@ template <typename T> void Main<T>::run() {
                 match = cur_match;
             }
 
-            if (match == m_model.length() || match == std::string::npos) {
+            if (match == m_content_handle->size() ||
+                match == std::string::npos) {
                 // this needs to change depending on whether there was
                 // already a search being done
                 set_status("Pattern not found");
@@ -344,7 +326,7 @@ template <typename T> void Main<T>::run() {
             break;
         }
         case Command::UPDATE_LINE_IDXS: {
-            m_model.update_line_idxs(command.payload_nums);
+            // m_model.update_line_idxs(command.payload_nums);
             break;
         }
         case Command::TOGGLE_HIGHLIGHTING: {
@@ -419,13 +401,12 @@ int main(int argc, char **argv) {
     }
 
     if (S_ISREG(statbuf.st_mode)) {
-        Main<FileHandle> main{std::move(filename), fd, tty,
-                              std::move(history_filename), history_maxsize};
+        Main main{std::move(filename), tty, std::move(history_filename),
+                  history_maxsize};
         main.run();
         return 0;
     } else {
-        Main<PipeHandle> main{std::move(filename), fd, tty,
-                              std::move(history_filename), history_maxsize};
+        Main main{fd, tty, std::move(history_filename), history_maxsize};
         main.run();
         return 0;
     }

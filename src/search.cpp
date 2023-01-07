@@ -1,7 +1,7 @@
 #include "search.h"
 
-#include <cstring>
 #include <algorithm>
+#include <cstring>
 #include <string>
 
 void tolower(const char *s, const char *end, char *out) {
@@ -28,6 +28,8 @@ std::vector<size_t> basic_search_all(std::string_view file_contents,
                                      size_t ending_offset,
                                      bool caseless /* = false */) {
     std::vector<size_t> out;
+    fprintf(stderr, "basic_search_all: beginning_offset=%zu\n",
+            beginning_offset);
     while (true) {
         size_t offset = basic_search_first(
             file_contents, pattern, beginning_offset, ending_offset, caseless);

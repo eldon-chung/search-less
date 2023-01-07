@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cassert>
 #include <mutex>
 #include <stdio.h>
@@ -12,10 +13,9 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+#include "ContentHandle.h"
 #include "Cursor.h"
-#include "FileHandle.h"
 #include "Page.h"
-#include "PipeHandle.h"
 
 inline std::string_view strip_trailing_rn(std::string_view str) {
     size_t last_non_newline_char = str.find_last_not_of("\r\n");
@@ -29,26 +29,23 @@ inline std::string_view strip_trailing_rn(std::string_view str) {
 // Serves as the driver for the entire view. For now let's keep it at a simple
 //  thing that just holds a text_window, and given the state that needs to be
 //  rendered drives the entire rendering logic
-template <typename T> struct View {
+struct View {
     std::mutex *m_nc_mutex;
     WINDOW *m_main_window_ptr;
     WINDOW *m_command_window_ptr;
     size_t m_main_window_height;
     size_t m_main_window_width;
 
-    T *m_model;
-    size_t m_offset;
+    ContentHandle *m_content_handle;
     bool m_wrap_lines;
 
     std::string m_status;
     std::string m_command;
 
-    static View create(std::mutex *nc_mutex, T *model, FILE *tty) {
-        return View(nc_mutex, model, tty);
-    }
+    Page m_page;
 
-  private:
-    View(std::mutex *nc_mutex, T *model, FILE *tty) {
+    static View create(std::mutex *nc_mutex, ContentHandle *content_handle,
+                       FILE *tty) {
         std::scoped_lock lock(*nc_mutex);
         newterm(getenv("TERM"), stdout, tty);
         start_color();
@@ -72,16 +69,22 @@ template <typename T> struct View {
         }
         wresize(stdscr, height - 1, width);
 
-        // The actual ctor
-        m_nc_mutex = nc_mutex;
-        m_main_window_ptr = stdscr;
-        m_command_window_ptr = command_window_ptr;
-        m_main_window_height = (size_t)(height - 1);
-        m_main_window_width = (size_t)width;
+        return View(nc_mutex, content_handle, command_window_ptr, height,
+                    width);
+    }
 
-        m_model = model;
-        m_wrap_lines = true;
-        m_offset = 0;
+  private:
+    View(std::mutex *nc_mutex, ContentHandle *content_handle,
+         WINDOW *command_window_ptr, int height, int width)
+        : m_nc_mutex(nc_mutex), m_main_window_ptr(stdscr),
+          m_command_window_ptr(command_window_ptr),
+          m_main_window_height((size_t)(height - 1)),
+          m_main_window_width((size_t)width), m_content_handle(content_handle),
+          m_wrap_lines(true), m_page(Page::get_page_at_byte_offset(
+                                  m_content_handle, 0, m_main_window_height,
+                                  m_main_window_width, m_wrap_lines))
+
+    {
     }
 
   public:
@@ -96,54 +99,42 @@ template <typename T> struct View {
         endwin(); // here's how you finish up ncurses mode
     }
 
-    Page<T> current_page() const {
-        return Page<T>::get_page_at_byte_offset(
-            m_model, m_offset, m_main_window_height, m_main_window_width,
-            m_wrap_lines);
+    Page current_page() const {
+        return m_page;
     }
 
     void scroll_up(size_t num_scrolls = 1) {
-        Page<T> page = current_page();
-        typename Page<T>::LineIt line = page.begin();
-        while (num_scrolls-- > 0 && line.has_prev()) {
-            --line;
+        while (num_scrolls-- > 0 && m_page.has_prev()) {
+            m_page.scroll_up();
         }
-        m_offset = line.m_cursor.get_offset();
     }
 
     void scroll_down(size_t num_scrolls = 1) {
-        Page<T> page = current_page();
-        typename Page<T>::LineIt line = page.begin();
-        while (num_scrolls-- > 0 && line.has_next()) {
-            ++line;
+        while (num_scrolls-- > 0 && m_page.has_next()) {
+            m_page.scroll_down();
         }
-        m_offset = line.m_cursor.get_offset();
     }
 
     void move_to_top() {
-        m_offset = 0;
+        move_to_byte_offset(0);
     }
 
     void move_to_end() {
-        m_offset = m_model->length();
+        move_to_byte_offset(m_content_handle->get_contents().length());
     }
 
     void move_to_byte_offset(size_t offset) {
-        Cursor cursor = Cursor<T>::get_cursor_at_byte_offset(m_model, offset);
-        if (m_wrap_lines) {
-            cursor = cursor.round_to_wrapped_line(m_main_window_width);
-        }
-        m_offset = cursor.get_offset();
+        m_page = Page::get_page_at_byte_offset(
+            m_content_handle, offset, m_main_window_height, m_main_window_width,
+            m_wrap_lines);
     }
 
     size_t get_starting_offset() const {
-        Page<T> page = current_page();
-        return page.begin().get_begin_offset();
+        return m_page.get_begin_offset();
     }
 
     size_t get_ending_offset() const {
-        Page<T> page = current_page();
-        return page.end().get_begin_offset();
+        return m_page.get_end_offset();
     }
 
     struct Highlight {
@@ -157,60 +148,52 @@ template <typename T> struct View {
         }
     };
 
-    void display_page_at(const std::vector<Highlight> &highlight_list) {
-        auto place_attr_on_line = [](WINDOW *window_ptr, size_t display_row,
-                                     size_t offset_of_row,
-                                     Highlight highlight) {
-            size_t starting_offset = std::max(highlight.offset, offset_of_row);
-            size_t starting_col = starting_offset - offset_of_row;
-            size_t length =
-                highlight.offset + highlight.length - starting_offset;
-            mvwchgat(window_ptr, (int)display_row, (int)starting_col,
-                     (int)length, WA_STANDOUT, 0, NULL);
-        };
+    void display_page_at(std::vector<Highlight> highlight_list) {
 
         std::scoped_lock lock(*m_nc_mutex);
 
         werase(m_main_window_ptr);
 
-        Page<T> page = current_page();
+        Page page = current_page();
 
-        auto page_lines_it = page.begin();
-        for (size_t display_row = 0; display_row < m_main_window_height;
-             ++display_row) {
-            if (page_lines_it != page.end()) {
-                std::string display_string(
-                    strip_trailing_rn(page_lines_it.get_contents()));
-                mvwaddstr(m_main_window_ptr, (int)display_row, 0,
-                          display_string.c_str());
-                ++page_lines_it;
-
+        for (size_t row_idx = 0; row_idx < m_main_window_height; ++row_idx) {
+            if (row_idx < page.get_num_lines()) {
+                std::string_view curr_line = page[row_idx];
+                mvwaddnstr(m_main_window_ptr, row_idx, 0, curr_line.data(),
+                           std::min(curr_line.size(), m_main_window_width));
             } else {
-                mvwaddnstr(m_main_window_ptr, (int)display_row, 0, "~", 1);
+                mvwaddnstr(m_main_window_ptr, row_idx, 0, "~", 1);
             }
         }
 
         wstandend(m_main_window_ptr);
 
-        page_lines_it = page.begin();
-        auto highlight_it = highlight_list.begin();
-        for (size_t display_row = 0;
-             display_row < m_main_window_height && page_lines_it != page.end();
-             ++display_row, ++page_lines_it) {
-            while (highlight_it != highlight_list.end() &&
-                   highlight_it->get_end_offset() <
-                       page_lines_it.get_begin_offset()) {
+        // split the highlights based on row
+        auto highlight_it = highlight_list.cbegin();
+        const char *base_addr = m_content_handle->get_contents().data();
+
+        for (size_t row_idx = 0; row_idx < m_main_window_height &&
+                                 highlight_it != highlight_list.cend();
+             ++row_idx) {
+            std::string_view curr_line = page[row_idx];
+            size_t starting_offset = (size_t)(curr_line.data() - base_addr);
+            size_t ending_offset =
+                (size_t)(curr_line.data() + curr_line.size() - base_addr);
+
+            ending_offset =
+                std::min(ending_offset, starting_offset + m_main_window_width);
+
+            while (highlight_it != highlight_list.cend() &&
+                   highlight_it->offset >= starting_offset &&
+                   highlight_it->offset < starting_offset + ending_offset) {
+
+                size_t highlight_len = std::min(
+                    highlight_it->length,
+                    starting_offset + ending_offset - highlight_it->offset);
+                mvwchgat(m_main_window_ptr, row_idx,
+                         highlight_it->offset - starting_offset, highlight_len,
+                         WA_STANDOUT, 0, 0);
                 ++highlight_it;
-            }
-            for (auto cur_highlight_it = highlight_it;
-                 cur_highlight_it != highlight_list.end(); ++cur_highlight_it) {
-                if (cur_highlight_it->get_begin_offset() >=
-                    page_lines_it.get_end_offset()) {
-                    break;
-                }
-                place_attr_on_line(m_main_window_ptr, display_row,
-                                   page_lines_it.get_begin_offset(),
-                                   *cur_highlight_it);
             }
         }
 
@@ -268,5 +251,10 @@ template <typename T> struct View {
 
         wclear(m_main_window_ptr);
         wclear(m_command_window_ptr);
+
+        size_t curr_offset = m_page.get_begin_offset();
+        m_page = Page::get_page_at_byte_offset(
+            m_content_handle, curr_offset, m_main_window_height,
+            m_main_window_width, m_wrap_lines);
     }
 };

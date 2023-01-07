@@ -1,23 +1,23 @@
 #pragma once
 
 #include <assert.h>
-#include <fcntl.h>
-#include <ncurses.h>
-#include <poll.h>
-#include <signal.h>
-#include <sys/ioctl.h>
-#include <sys/select.h>
-#include <termios.h>
-#include <curses.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <sys/ttydefaults.h>
 #include <cctype>
 #include <charconv>
+#include <curses.h>
+#include <fcntl.h>
 #include <mutex>
+#include <ncurses.h>
+#include <poll.h>
 #include <semaphore>
-#include <thread>
+#include <signal.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <string>
+#include <sys/ioctl.h>
+#include <sys/select.h>
+#include <sys/ttydefaults.h>
+#include <termios.h>
+#include <thread>
 
 #include "Channel.h"
 #include "Command.h"

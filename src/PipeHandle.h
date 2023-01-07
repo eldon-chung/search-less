@@ -8,112 +8,13 @@
 #include <unistd.h>
 #include <vector>
 
-#include "FileHandle.h"
+#include "ContentHandle.h"
 
-class PipeHandle {
-    FileHandle m_file_handle;
-    std::string m_path;
-    int m_fd; // the pipe file des
+class PipeHandle final : public ContentHandle {
+    int m_fd;      // the pipe file des
+    int m_temp_fd; // the temp file des
 
   public:
-    PipeHandle(std::string path, int fd, int temp_fd)
-        : m_file_handle(FileHandle::initialize("", temp_fd)),
-          m_path(std::move(path)), m_fd(fd) {
-    }
-
-    struct LineIt {
-        using difference_type = size_t;
-        using value_type = std::string_view;
-        using pointer = void;
-        using reference = std::string_view;
-        using iterator_category = std::bidirectional_iterator_tag;
-
-        static bool is_going_to_eof(FileHandle::LineIt const &line_it) {
-            return (line_it->empty() || line_it->back() != '\n');
-        }
-
-        PipeHandle *m_pipe_handle;
-        FileHandle *m_file_handle;
-        FileHandle::LineIt m_file_line_it;
-        bool m_going_into_eof = false;
-        bool m_is_eof = false;
-
-        bool operator==(const LineIt &other) const {
-            // return true for EOF
-            return m_is_eof == other.m_is_eof &&
-                   (m_is_eof || m_file_line_it == other.m_file_line_it);
-        }
-        std::string_view operator*() const {
-            return *m_file_line_it;
-        }
-        struct Cursed {
-            std::string_view tmp;
-            std::string_view *operator->() {
-                return &tmp;
-            }
-        };
-        Cursed operator->() const {
-            return {**this};
-        }
-        LineIt &operator++() {
-            // if at last line, we return sentinel
-            auto next = m_file_line_it;
-            if (m_is_eof) {
-                assert(m_file_line_it->length() == 0);
-                return *this;
-            }
-
-            assert(m_file_line_it->length() != 0);
-
-            // if we are at the last line
-            if ((++next)->length() == 0 || m_going_into_eof) {
-                m_is_eof = true;
-                ++m_file_line_it;
-                assert(m_file_line_it->length() == 0);
-                return *this;
-            }
-
-            // if we are at the second last line
-            if ((++next)->length() == 0) {
-                // read more to see how much of the last line we can fill.
-                // go into eof if and only if we did not find a new line
-                m_going_into_eof = !m_pipe_handle->read_to_newl_into_temp();
-            }
-
-            ++m_file_line_it;
-            return *this;
-        }
-        LineIt operator++(int) {
-            PipeHandle::LineIt to_return = *this;
-            ++(*this);
-            return to_return;
-        }
-        LineIt &operator--() {
-            --m_file_line_it;
-            if (m_is_eof) {
-                m_is_eof = false;
-                m_going_into_eof = true;
-            } else {
-                m_going_into_eof = false;
-            }
-            return *this;
-        }
-        LineIt operator--(int) {
-            auto to_return = *this;
-            --(*this);
-            return to_return;
-        }
-        size_t line_begin_offset() const {
-            return m_file_line_it.line_begin_offset();
-        }
-        size_t line_end_offset() const {
-            return m_file_line_it.line_end_offset();
-        }
-        FileHandle const *get_model() const {
-            return m_file_handle;
-        }
-    };
-
     PipeHandle(PipeHandle const &other) = delete;
     PipeHandle &operator=(PipeHandle const &other) = delete;
 
@@ -121,9 +22,10 @@ class PipeHandle {
     PipeHandle &operator=(PipeHandle &&other) = delete;
     ~PipeHandle() {
         close(m_fd);
+        close(m_temp_fd);
     }
 
-    static PipeHandle initialize(std::string path, int fd) {
+    PipeHandle(int fd) : m_fd(fd) {
         // create a temp file
         char temp_filename[7] = "XXXXXX";
         int temp_fd = mkstemp(temp_filename);
@@ -133,16 +35,23 @@ class PipeHandle {
         }
         unlink(temp_filename);
 
-        return PipeHandle{std::move(path), fd, temp_fd};
+        m_temp_fd = temp_fd;
     }
 
-  public:
+  private:
     ssize_t read_into_temp(size_t num_to_read = 4096) {
+
+        // get the temp file size
+        // so we know where to start writing to the file
         struct stat statbuf;
-        fstat(m_file_handle.get_fd(), &statbuf);
+        fstat(m_temp_fd, &statbuf);
         off_t offset = (off_t)statbuf.st_size;
-        ssize_t ret_val = splice(m_fd, NULL, m_file_handle.get_fd(), &offset,
-                                 num_to_read, SPLICE_F_NONBLOCK);
+
+        // splice from m_fd into temp file
+        ssize_t ret_val = splice(m_fd, NULL, m_temp_fd, &offset, num_to_read,
+                                 SPLICE_F_NONBLOCK);
+
+        // if nothing was read, we just return
         if (ret_val == 0) {
             return 0;
         }
@@ -154,7 +63,22 @@ class PipeHandle {
             fprintf(stderr, "PipeHandle error splicing. %s\n", strerror(errno));
             exit(1);
         }
-        m_file_handle.read_to_eof();
+
+        // get the temp file size again so we can remap
+        // into m_contents
+        fstat(m_temp_fd, &statbuf);
+        size_t curr_file_size = (size_t)statbuf.st_size;
+
+        // potentially needs an unmap.
+        if (m_contents.data()) {
+            munmap((void *)m_contents.data(), m_contents.size());
+        }
+
+        // remap now
+        char *new_contents_ptr =
+            (char *)mmap(NULL, curr_file_size, PROT_READ, MAP_PRIVATE, m_fd, 0);
+
+        m_contents = {new_contents_ptr, new_contents_ptr + curr_file_size};
         return ret_val;
     }
 
@@ -163,155 +87,38 @@ class PipeHandle {
         do {
             num_read = read_into_temp();
         } while (num_read != 0);
-        m_file_handle.read_to_eof();
     }
 
-    // returns true if found a newline
-    // returns false if read to EOF without a newline
-    bool read_to_newl_into_temp() {
+  public:
+    bool read_more() final {
+        ssize_t total_read = 0;
         ssize_t num_read = 0;
-        size_t last_line_offset =
-            m_file_handle.length() > 0
-                ? (--m_file_handle.end()).line_begin_offset()
-                : 0;
         do {
             num_read = read_into_temp();
-            if (m_file_handle.get_line_at_byte_offset(last_line_offset)
-                    ->ends_with('\n')) {
-                return true;
-            }
+            total_read += num_read;
         } while (num_read != 0);
-
-        return false;
+        return total_read != 0;
     }
 
-    PipeHandle::LineIt begin() {
-        auto fh_line_it = m_file_handle.begin();
-        return {this, &m_file_handle, fh_line_it,
-                PipeHandle::LineIt::is_going_to_eof(fh_line_it), false};
-    }
-
-    PipeHandle::LineIt end() {
-        return {this, &m_file_handle, m_file_handle.end(), false, true};
-    }
-
-    PipeHandle::LineIt get_nth_line(size_t line_idx) {
-
-        auto file_handle_line_it = m_file_handle.begin();
-
-        if (file_handle_line_it->length() == 0) {
-            return {this, &m_file_handle, m_file_handle.end(), false, true};
+    bool read_to_eof() final {
+        bool has_more = false;
+        while (read_more()) {
+            has_more = true;
         }
-
-        // if we are on the last line, and line_idx != 0;
-        // we also return the sentinel EOF
-        if (file_handle_line_it->back() != '\n') {
-            if (line_idx == 0) {
-                return {this, &m_file_handle, m_file_handle.begin(), true,
-                        false};
-            } else {
-                return {this, &m_file_handle, m_file_handle.end(), false, true};
-            }
-        }
-
-        // else we are guaranteed that there is at least one line ahead of us
-        while (line_idx-- > 0) {
-            // every iteration we need to try to advance the file_handle_line_it
-            auto next = file_handle_line_it;
-            ++next;
-            if ((++next)->length() == 0) {
-                // if the next line is the last line (not EOF)
-                bool has_newl = read_to_newl_into_temp();
-                if (!has_newl) {
-                    // if there is no more newline in our new read
-                    if (line_idx == 0) {
-                        // but this is the line that we want
-                        // so just advance the handle and return it
-                        return {this, &m_file_handle, ++file_handle_line_it,
-                                true, false};
-                    } else {
-                        // else we have no hope of returning it
-                        return {this, &m_file_handle, m_file_handle.end(),
-                                false, true};
-                    }
-                }
-            } else {
-                // if not, just advance the current line
-                ++file_handle_line_it;
-            }
-        }
-
-        return {this, &m_file_handle, file_handle_line_it,
-                PipeHandle::LineIt::is_going_to_eof(file_handle_line_it)};
+        return has_more;
     }
 
-    PipeHandle::LineIt get_last_line() {
-        // get the left and right bounds
-        read_to_eof();
-        auto file_handle_line_it = --m_file_handle.end();
-        return {this, &m_file_handle, file_handle_line_it,
-                PipeHandle::LineIt::is_going_to_eof(file_handle_line_it)};
+    std::string_view get_path() const final {
+        return "";
     }
 
-    PipeHandle::LineIt get_line_at_byte_offset(size_t byte_offset) {
-        size_t curr_length = m_file_handle.length();
-        ssize_t byte_diff = (ssize_t)(byte_offset - curr_length);
-        if (byte_diff >= 0) {
-            read_into_temp((size_t)byte_diff);
-            read_to_newl_into_temp();
-        }
-
-        FileHandle::LineIt fh_line_it =
-            m_file_handle.get_line_at_byte_offset(byte_offset);
-        if (fh_line_it.line_end_offset() <= byte_offset) {
-            return {this, &m_file_handle, m_file_handle.end(), false, true};
-        }
-        return {this, &m_file_handle, fh_line_it,
-                PipeHandle::LineIt::is_going_to_eof(fh_line_it)};
-    }
-
-    std::string_view get_contents() const {
-        return m_file_handle.get_contents();
-    }
-
-    ssize_t num_byte_diff() const {
-        int pipe_size = 0;
-        if (ioctl(m_file_handle.get_fd(), FIONREAD, &pipe_size) == -1) {
-            fprintf(stderr, "Error calling ioctl on pipe. %s\n",
-                    strerror(errno));
+    bool has_changed() const final {
+        int result = 0;
+        if (ioctl(m_fd, FIONREAD, &result) == -1) {
+            fprintf(stderr, "PipeHandle: ioctrl error %s\n", strerror(errno));
             exit(1);
         }
 
-        return (ssize_t)pipe_size;
-    }
-
-    bool has_changed() const {
-        return num_byte_diff() != 0;
-    }
-
-    size_t get_num_processed_bytes() const {
-        return m_file_handle.get_num_processed_bytes();
-    }
-
-    ssize_t read_to_eof() {
-        ssize_t size_diff = num_byte_diff();
-        if (size_diff <= 0) {
-            return size_diff;
-        }
-        read_to_eof_into_temp();
-        return size_diff;
-    }
-
-    size_t length() const {
-        return m_file_handle.length();
-    };
-
-    std::string_view relative_path() const {
-        return m_path;
-    }
-
-    void update_line_idxs(const std::vector<size_t> &offsets) {
-        assert(offsets.size() >= 1);
-        m_file_handle.update_line_idxs(offsets);
+        return result != 0;
     }
 };
