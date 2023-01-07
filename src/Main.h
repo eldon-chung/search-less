@@ -57,15 +57,17 @@ struct Main {
 
     size_t m_half_page_size;
     size_t m_page_size;
+    bool m_time_commands;
 
     Main(ContentHandle *content_ptr, FILE *tty, std::string history_filename,
-         int history_maxsize)
+         int history_maxsize, bool time_commands)
         : m_content_handle(content_ptr),
           m_view(View::create(&m_nc_mutex, m_content_handle.get(), tty)),
           m_input(&m_nc_mutex, &m_chan, tty, std::move(history_filename),
                   history_maxsize),
           m_taskmaster(&m_task_chan), m_highlight_active(true),
-          m_caseless_mode(CaselessSearchMode::SENSITIVE) {
+          m_caseless_mode(CaselessSearchMode::SENSITIVE),
+          m_time_commands(time_commands) {
         register_for_sigwinch_channel(&m_chan);
 
         display_page();
@@ -77,13 +79,15 @@ struct Main {
 
   public:
     Main(std::string path, FILE *tty, std::string history_filename,
-         int history_maxsize)
+         int history_maxsize, bool time_commands)
         : Main(new FileHandle(std::move(path)), tty, history_filename,
-               history_maxsize) {
+               history_maxsize, time_commands) {
     }
 
-    Main(int fd, FILE *tty, std::string history_filename, int history_maxsize)
-        : Main(new PipeHandle(fd), tty, history_filename, history_maxsize) {
+    Main(int fd, FILE *tty, std::string history_filename, int history_maxsize,
+         bool time_commands)
+        : Main(new PipeHandle(fd), tty, history_filename, history_maxsize,
+               time_commands) {
     }
 
     ~Main() {

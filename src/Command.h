@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -31,8 +32,17 @@ struct Command {
         SEARCH_CLEAR,
         TOGGLE_HIGHLIGHTING,
     };
-    Type type = INVALID;
-    std::string payload_str = "";
-    std::vector<size_t> payload_nums = {};
-    size_t payload_num = 0;
+    Type type;
+    std::string payload_str;
+    std::vector<size_t> payload_nums;
+    size_t payload_num;
+    std::chrono::time_point<std::chrono::steady_clock> start;
+
+    Command(Type type = INVALID, std::string payload_str = "",
+            std::vector<size_t> payload_nums = {}, size_t payload_num = 0,
+            std::chrono::time_point<std::chrono::steady_clock> start =
+                std::chrono::steady_clock::now())
+        : type(type), payload_str(payload_str), payload_nums(payload_nums),
+          payload_num(payload_num), start(start) {
+    }
 };

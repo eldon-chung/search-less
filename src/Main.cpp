@@ -3,6 +3,7 @@
 #include <charconv>
 #include <fcntl.h>
 #include <optional>
+#include <span>
 #include <stdlib.h>
 #include <string.h>
 #include <string_view>
@@ -63,9 +64,18 @@ void Main::display_command_or_status() {
 }
 
 void Main::run() {
-
+    std::optional<Command> prev_command;
     while (true) {
+        if (m_time_commands && prev_command) {
+            fprintf(stderr, "Time taken for command %d: %ld ns\n",
+                    prev_command->type,
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::steady_clock::now() - prev_command->start)
+                        .count());
+        }
+
         Command command = m_chan.pop().value();
+        prev_command = command;
         switch (command.type) {
         case Command::INVALID:
             m_view.display_status("Invalid key pressed: " +
@@ -402,7 +412,6 @@ void Main::run() {
 }
 
 int main(int argc, char **argv) {
-
     const char *history_filename_env = getenv("SEARCHLESSHISTFILE");
     std::string history_filename;
     if (history_filename_env && *history_filename_env) {
@@ -422,17 +431,30 @@ int main(int argc, char **argv) {
     }
     FILE *tty = isatty(STDIN_FILENO) ? stdin : fopen("/dev/tty", "r");
 
-    std::string filename;
-    int fd;
-    if (argc >= 2) {
-        // try to open the file
-        filename = argv[1];
-        fd = open(argv[1], O_RDONLY);
-        if (fd == -1) {
-            fprintf(stderr, "%s: %s\n", argv[1], strerror(errno));
-            return 1;
+    // TODO: proper cmdline arg parsing
+    std::string filename = "";
+    int fd = -1;
+    bool time_commands = false;
+    for (char *arg : std::span<char *>(argv, argv + argc)) {
+        using namespace std::string_literals;
+        if (arg == "--time-commands"s) {
+            time_commands = true;
+            continue;
+        } else {
+            // try to open the file
+            filename = arg;
+            fd = open(arg, O_RDONLY);
+            if (fd == -1) {
+                fprintf(stderr, "%s: %s\n", arg, strerror(errno));
+                return 1;
+            }
         }
+    }
+
+    if (fd != -1) {
+        // We already have a file
     } else if (!isatty(STDIN_FILENO)) {
+        // Use stdin
         fd = STDIN_FILENO;
     } else {
         fprintf(stderr, "Missing filename\n");
@@ -447,11 +469,12 @@ int main(int argc, char **argv) {
 
     if (S_ISREG(statbuf.st_mode)) {
         Main main{std::move(filename), tty, std::move(history_filename),
-                  history_maxsize};
+                  history_maxsize, time_commands};
         main.run();
         return 0;
     } else {
-        Main main{fd, tty, std::move(history_filename), history_maxsize};
+        Main main{fd, tty, std::move(history_filename), history_maxsize,
+                  time_commands};
         main.run();
         return 0;
     }

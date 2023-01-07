@@ -1,8 +1,8 @@
 #include "Worker.h"
 
-#include <sys/types.h>
 #include <algorithm>
 #include <string>
+#include <sys/types.h>
 #include <vector>
 
 #include "Command.h"
@@ -30,9 +30,8 @@ void compute_line_offsets(std::stop_token stop, Channel<Command> *chan,
     // lastly, append the number of processed bytes
     offset_list.push_back(starting_offset);
 
-    chan->push(Command{.type = Command::UPDATE_LINE_IDXS,
-                       .payload_str = "clo read byte(s):" +
-                                      std::to_string(starting_offset),
-                       .payload_nums = offset_list});
+    chan->push(Command{Command::UPDATE_LINE_IDXS,
+                       "clo read byte(s):" + std::to_string(starting_offset),
+                       offset_list});
     promise.set_value();
 }
