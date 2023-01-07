@@ -21,9 +21,6 @@ void Main::update_screen_highlight_offsets() {
         return;
     }
 
-    fprintf(stderr, "update_screen_highlight_offsets: starting_offset %zu\n",
-            m_view.get_starting_offset());
-
     auto result_offsets = basic_search_all(
         m_content_handle->get_contents(), m_last_search_pattern,
         m_view.get_starting_offset(), m_view.get_ending_offset(),
@@ -301,7 +298,7 @@ void Main::run() {
             size_t match = basic_search_first(
                 contents, m_last_search_pattern, left_bound, right_bound,
                 m_caseless_mode != CaselessSearchMode::SENSITIVE);
-            fprintf(stderr, "search_search: match value %zu\n", match);
+
             // TODO: optimize
             for (size_t i = 1; i < command.payload_num; ++i) {
                 size_t cur_match = basic_search_first(
