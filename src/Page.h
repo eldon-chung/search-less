@@ -24,8 +24,32 @@ struct Page {
 
     // Invariants
     size_t m_width;
+    size_t m_height;
     bool m_wrap_lines;
 
+  private:
+    static size_t round_to_width_offset(ContentHandle const *content_handle,
+                                        size_t offset, size_t width) {
+        // fprintf(stderr, "round_to_width_offset: %zu\n", offset);
+        if (offset == 0) {
+            return 0;
+        }
+
+        // if the previous character is a newl, we stay
+        if (content_handle->get_contents()[offset - 1] == '\n') {
+            return offset;
+        }
+
+        std::string_view prior_contents =
+            content_handle->get_contents().substr(0, offset);
+        size_t last_newl = prior_contents.find_last_of("\n");
+        size_t last_line_offset =
+            (last_newl == std::string::npos) ? 0 : last_newl + 1;
+
+        return (offset - last_line_offset) / width * width + last_line_offset;
+    }
+
+  public:
     static Page get_page_at_byte_offset(ContentHandle const *content_handle,
                                         size_t offset, size_t height,
                                         size_t width, bool wrap_lines) {
@@ -47,6 +71,8 @@ struct Page {
 
         // note: need to handle the case where we're given an offset and can
         // scroll further back up
+
+        offset = round_to_width_offset(content_handle, offset, width);
 
         std::deque<std::string_view> lines;
         // build the initial list of lines and bound the size of content
@@ -73,8 +99,15 @@ struct Page {
             curr_content = curr_content.substr(next_newl + 1);
         }
 
-        return {std::move(lines), content_handle, offset, (size_t)width,
-                wrap_lines};
+        Page initial_page = {std::move(lines), content_handle, offset, width,
+                             height,           wrap_lines};
+
+        while (initial_page.get_num_lines() < height &&
+               initial_page.has_prev()) {
+            initial_page.scroll_up();
+        }
+
+        return initial_page;
     }
 
     std::string_view operator[](size_t index) const {
@@ -133,8 +166,10 @@ struct Page {
             if (last_idx != std::string::npos) {
                 prior_contents = prior_contents.substr(last_idx + 1);
             }
-
-            m_lines.pop_back();
+            assert(m_lines.size() <= m_height);
+            if (m_lines.size() == m_height) {
+                m_lines.pop_front();
+            }
             m_lines.push_back(prior_contents);
             // do we need to make sure prior contents.data() is correct
             // to update global offset properly
@@ -153,8 +188,10 @@ struct Page {
                 m_content_handle->get_contents().substr(
                     m_global_offset - m_width, m_width);
 
-            m_lines.pop_back();
-            m_lines.push_back(prior_line);
+            if (m_lines.size() == m_height) {
+                m_lines.pop_back();
+            }
+            m_lines.push_front(prior_line);
             m_global_offset -= m_width;
         } else {
             prior_contents.remove_suffix(1);
@@ -165,7 +202,10 @@ struct Page {
 
             // special case I guess
             if (prior_contents.empty()) {
-                m_lines.pop_back();
+                assert(m_lines.size() <= m_height);
+                if (m_lines.size() == m_height) {
+                    m_lines.pop_back();
+                }
                 m_lines.push_front(prior_contents);
                 m_global_offset -= 1;
             } else {
@@ -174,7 +214,10 @@ struct Page {
                 prior_contents =
                     prior_contents.substr(rounded_wrapped_line, m_width);
 
-                m_lines.pop_back();
+                assert(m_lines.size() <= m_height);
+                if (m_lines.size() == m_height) {
+                    m_lines.pop_back();
+                }
                 m_lines.push_front(prior_contents);
 
                 m_global_offset =

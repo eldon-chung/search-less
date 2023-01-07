@@ -120,7 +120,10 @@ struct View {
     }
 
     void move_to_end() {
-        move_to_byte_offset(m_content_handle->get_contents().length());
+        if (m_content_handle->get_contents().empty()) {
+            return;
+        }
+        move_to_byte_offset(m_content_handle->get_contents().length() - 1);
     }
 
     void move_to_byte_offset(size_t offset) {
