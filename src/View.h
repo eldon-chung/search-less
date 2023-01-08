@@ -124,6 +124,11 @@ struct View {
     }
 
     void move_to_end() {
+
+        if (m_content_handle->has_changed()) {
+            m_content_handle->read_to_eof();
+        }
+
         if (m_content_handle->get_contents().empty()) {
             return;
         }

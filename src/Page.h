@@ -30,9 +30,13 @@ struct Page {
   private:
     static size_t round_to_width_offset(ContentHandle const *content_handle,
                                         size_t offset, size_t width) {
-        // fprintf(stderr, "round_to_width_offset: %zu\n", offset);
         if (offset == 0) {
             return 0;
+        }
+
+        if (offset >= content_handle->get_contents().size()) {
+            throw std::out_of_range("Page: attempting to index into something"
+                                    "out of content size.\n");
         }
 
         // if the previous character is a newl, we stay

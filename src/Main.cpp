@@ -225,11 +225,6 @@ void Main::run() {
                 break;
             }
 
-            // TODO: optimize?
-            // TODO: Should get nth match, not nth line containing matches
-            // TODO: should display "search cursor" so that multiple matches
-            // on the same line can be `n`d properly
-
             // prepare the final value that we should be moving to
 
             // size_t end_of_file_offset = contents.size();
@@ -287,17 +282,18 @@ void Main::run() {
                 break;
             }
 
-            // use the most recent search pattern stored in
-            // m_last_search_pattern
+            // for now let's just eagerly load as much
+            // as possible
+            if (m_content_handle->has_changed()) {
+                size_t curr_offset = m_view.get_starting_offset();
+                m_content_handle->read_to_eof();
+                m_view.move_to_byte_offset(curr_offset);
+            }
+
             std::string_view contents = m_content_handle->get_contents();
             if (contents.empty()) {
                 break;
             }
-
-            // TODO: optimize?
-            // TODO: Should get nth match, not nth line containing matches
-            // TODO: should display "search cursor" so that multiple matches
-            // on the same line can be `n`d properly
 
             // we are guaranteed they will be initialised
             size_t end_of_file_offset = contents.size();
@@ -345,6 +341,14 @@ void Main::run() {
             set_command("", 0);
             set_status("");
             m_highlight_active = true;
+
+            // for now let's just eagerly load as much
+            // as possible
+            if (m_content_handle->has_changed()) {
+                size_t curr_offset = m_view.get_starting_offset();
+                m_content_handle->read_to_eof();
+                m_view.move_to_byte_offset(curr_offset);
+            }
 
             std::string_view contents = m_content_handle->get_contents();
 
