@@ -114,8 +114,17 @@ struct View {
     }
 
     void scroll_down(size_t num_scrolls = 1) {
-        while (num_scrolls-- > 0 && m_page.has_next()) {
-            m_page.scroll_down();
+        while (num_scrolls-- > 0) {
+            if (m_page.has_next()) {
+                m_page.scroll_down();
+            } else if (m_content_handle->has_changed()) {
+                size_t offset = m_page.get_begin_offset();
+                m_content_handle->read_more();
+                move_to_byte_offset(offset);
+                m_page.scroll_down();
+            } else {
+                break;
+            }
         }
     }
 
