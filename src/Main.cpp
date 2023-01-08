@@ -439,7 +439,7 @@ int main(int argc, char **argv) {
     std::string filename = "";
     int fd = -1;
     bool time_commands = false;
-    for (char *arg : std::span<char *>(argv, argv + argc)) {
+    for (char *arg : std::span<char *>(argv + 1, argv + argc)) {
         using namespace std::string_literals;
         if (arg == "--time-commands"s) {
             time_commands = true;
