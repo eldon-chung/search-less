@@ -150,10 +150,6 @@ struct Cursor {
         // newline case?
         // based on our usage it seems you should do the next line, not the
         // previous
-        // fprintf(stderr, "round_to_wrapped_line: called\n");
-        // fprintf(stderr,
-        //         "round_to_wrapped_line: m_cur_line offset [%zu] width
-        //         [%zu]\n", m_cur_line.line_begin_offset(), m_cur_line.size());
 
         size_t line_offset = m_cur_line.line_begin_offset() +
                              ((m_offset - m_cur_line.line_begin_offset()) /
@@ -162,7 +158,6 @@ struct Cursor {
         LineIt line = m_cur_line;
         if (line_offset == m_cur_line.line_end_offset() &&
             m_cur_line.size() > 1) {
-            // fprintf(stderr, "round_to_wrapped_line: called\n");
             // if we are indexing into a '\n'
             line = ++(LineIt(line));
             line_offset = line.line_begin_offset();

@@ -94,11 +94,13 @@ struct Page {
 
         const char *base_addr = contents.data();
         std::string_view curr_content = contents.substr(offset);
-
         std::deque<PageLine> lines;
         while (!curr_content.empty() && lines.size() < height) {
             size_t next_newl = curr_content.find_first_of("\n");
-
+            if (next_newl == std::string::npos) {
+                // if we can't find it take it to the end
+                next_newl = curr_content.size() - 1;
+            }
             if (wrap_lines) {
                 // break the current line into multiple string views
                 // and push_back all over them into into the lines collection
@@ -198,7 +200,6 @@ struct Page {
         std::string_view prior_contents = contents.substr(0, m_global_offset);
 
         if (prior_contents.back() != '\n') {
-            // simple case where we just shift back by width
             std::string_view prior_line =
                 contents.substr(m_global_offset - m_width, m_width);
 
@@ -235,7 +236,6 @@ struct Page {
                 }
                 m_lines.push_front(
                     from_string_view(contents.data(), prior_contents));
-
                 m_global_offset = m_lines.front().start;
             }
         }
