@@ -80,9 +80,10 @@ struct View {
           m_command_window_ptr(command_window_ptr),
           m_main_window_height((size_t)(height - 1)),
           m_main_window_width((size_t)width), m_content_handle(content_handle),
-          m_wrap_lines(true), m_page(Page::get_page_at_byte_offset(
-                                  m_content_handle, 0, m_main_window_height,
-                                  m_main_window_width, m_wrap_lines))
+          m_wrap_lines(true),
+          m_page(Page::get_page_at_byte_offset(
+              m_content_handle->get_contents(), 0, m_main_window_height,
+              m_main_window_width, m_wrap_lines))
 
     {
     }
@@ -109,19 +110,19 @@ struct View {
 
     void scroll_up(size_t num_scrolls = 1) {
         while (num_scrolls-- > 0 && m_page.has_prev()) {
-            m_page.scroll_up();
+            m_page.scroll_up(m_content_handle->get_contents());
         }
     }
 
     void scroll_down(size_t num_scrolls = 1) {
         while (num_scrolls-- > 0) {
-            if (m_page.has_next()) {
-                m_page.scroll_down();
+            if (m_page.has_next(m_content_handle->get_contents())) {
+                m_page.scroll_down(m_content_handle->get_contents());
             } else if (m_content_handle->has_changed()) {
                 size_t offset = m_page.get_begin_offset();
                 m_content_handle->read_more();
                 move_to_byte_offset(offset);
-                m_page.scroll_down();
+                m_page.scroll_down(m_content_handle->get_contents());
             } else {
                 break;
             }
@@ -146,8 +147,8 @@ struct View {
 
     void move_to_byte_offset(size_t offset) {
         m_page = Page::get_page_at_byte_offset(
-            m_content_handle, offset, m_main_window_height, m_main_window_width,
-            m_wrap_lines);
+            m_content_handle->get_contents(), offset, m_main_window_height,
+            m_main_window_width, m_wrap_lines);
     }
 
     size_t get_starting_offset() const {
@@ -179,7 +180,8 @@ struct View {
 
         for (size_t row_idx = 0; row_idx < m_main_window_height; ++row_idx) {
             if (row_idx < page.get_num_lines()) {
-                std::string_view curr_line = page[row_idx];
+                std::string_view curr_line = page.get_nth_line(
+                    m_content_handle->get_contents(), row_idx);
                 mvwaddnstr(m_main_window_ptr, row_idx, 0, curr_line.data(),
                            std::min(curr_line.size(), m_main_window_width));
             } else {
@@ -197,7 +199,8 @@ struct View {
         for (size_t row_idx = 0; row_idx < m_main_window_height &&
                                  highlight_it != highlight_list.cend();
              ++row_idx) {
-            std::string_view curr_line = page[row_idx];
+            std::string_view curr_line =
+                page.get_nth_line(m_content_handle->get_contents(), row_idx);
             size_t starting_offset = (size_t)(curr_line.data() - base_addr);
             size_t ending_offset =
                 (size_t)(curr_line.data() + curr_line.size() - base_addr);
@@ -276,7 +279,7 @@ struct View {
 
         size_t curr_offset = m_page.get_begin_offset();
         m_page = Page::get_page_at_byte_offset(
-            m_content_handle, curr_offset, m_main_window_height,
+            m_content_handle->get_contents(), curr_offset, m_main_window_height,
             m_main_window_width, m_wrap_lines);
     }
 };

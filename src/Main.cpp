@@ -233,7 +233,8 @@ void Main::run() {
 
                 Page const &page = m_view.const_current_page();
                 size_t curr_line_match, prev_match;
-                std::string_view curr_line = page[0];
+                std::string_view curr_line =
+                    page.get_nth_line(m_content_handle->get_contents(), 0);
 
                 size_t curr_line_offset = page.get_begin_offset();
                 size_t curr_line_end = curr_line_offset + curr_line.size();
@@ -303,7 +304,8 @@ void Main::run() {
                 Page const &page = m_view.const_current_page();
 
                 size_t curr_line_match, next_match;
-                std::string_view curr_line = page[0];
+                std::string_view curr_line =
+                    page.get_nth_line(m_content_handle->get_contents(), 0);
 
                 size_t curr_line_offset = page.get_begin_offset();
                 size_t curr_line_end = curr_line_offset + curr_line.size();
@@ -328,7 +330,7 @@ void Main::run() {
                     break;
                 } else {
                     m_view.move_to_byte_offset(next_match);
-                    if (!page.has_next()) {
+                    if (!page.has_next(m_content_handle->get_contents())) {
                         break;
                     }
                 }
