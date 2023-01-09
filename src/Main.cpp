@@ -16,7 +16,7 @@
 // this a static method that takes in params
 void Main::update_screen_highlight_offsets() {
 
-    if (m_last_search_pattern.empty()) {
+    if (m_search_state.search_pattern().empty()) {
         return;
     }
 
@@ -28,16 +28,17 @@ void Main::update_screen_highlight_offsets() {
     }
 
     auto result_offsets = basic_search_all(
-        m_content_handle->get_contents(), m_last_search_pattern,
+        m_content_handle->get_contents(), m_search_state.search_pattern(),
         m_view.get_starting_offset(), m_view.get_ending_offset(),
-        m_caseless_mode != CaselessSearchMode::SENSITIVE);
+        m_search_state.mode() != SearchState::Case::SENSITIVE);
 
     // clear our highlight offsets
     m_highlight_offsets.clear();
     m_highlight_offsets.reserve(result_offsets.size());
 
     for (size_t offset : result_offsets) {
-        m_highlight_offsets.push_back({offset, m_last_search_pattern.length()});
+        m_highlight_offsets.push_back(
+            {offset, m_search_state.search_pattern().length()});
     }
 }
 
@@ -55,7 +56,7 @@ void Main::display_command_or_status() {
         m_view.display_command(m_command_str_buffer, m_command_cursor_pos);
     } else if (!m_status_str_buffer.empty()) {
         m_view.display_status(m_status_str_buffer);
-    } else if (!m_last_search_pattern.empty() ||
+    } else if (!m_search_state.search_pattern().empty() ||
                m_content_handle->get_path().empty()) {
         m_view.display_command(":", 1);
     } else {
@@ -151,25 +152,26 @@ void Main::run() {
         }
         case Command::TOGGLE_CASELESS: {
             set_command("", 0);
-            if (m_caseless_mode == CaselessSearchMode::INSENSITIVE) {
-                m_caseless_mode = CaselessSearchMode::SENSITIVE;
+            if (m_search_state.mode() == SearchState::Case::INSENSITIVE) {
+                m_search_state.mode() = SearchState::Case::SENSITIVE;
                 m_view.display_status(command.payload_str +
                                       ": Caseless search disabled");
             } else {
-                m_caseless_mode = CaselessSearchMode::INSENSITIVE;
+                m_search_state.mode() = SearchState::Case::INSENSITIVE;
                 m_view.display_status(command.payload_str +
                                       ": Caseless search enabled");
             }
             break;
         }
         case Command::TOGGLE_CONDITIONALLY_CASELESS: {
-            if (m_caseless_mode ==
-                CaselessSearchMode::CONDITIONALLY_SENSITIVE) {
-                m_caseless_mode = CaselessSearchMode::SENSITIVE;
+            if (m_search_state.mode() ==
+                SearchState::Case::CONDITIONALLY_SENSITIVE) {
+                m_search_state.mode() = SearchState::Case::SENSITIVE;
                 m_view.display_status(command.payload_str +
                                       ": Caseless search disabled");
             } else {
-                m_caseless_mode = CaselessSearchMode::CONDITIONALLY_SENSITIVE;
+                m_search_state.mode() =
+                    SearchState::Case::CONDITIONALLY_SENSITIVE;
                 m_view.display_status(
                     command.payload_str +
                     ": Conditionally caseless search enabled (case is "
@@ -216,7 +218,7 @@ void Main::run() {
             m_highlight_active = true;
 
             // for now if search pattern is empty, we just break
-            if (m_last_search_pattern.empty()) {
+            if (m_search_state.search_pattern().empty()) {
                 break;
             }
 
@@ -240,13 +242,14 @@ void Main::run() {
                 size_t curr_line_end = curr_line_offset + curr_line.size();
 
                 curr_line_match = basic_search_first(
-                    contents, m_last_search_pattern, curr_line_offset,
+                    contents, m_search_state.search_pattern(), curr_line_offset,
                     curr_line_end,
-                    m_caseless_mode != CaselessSearchMode::SENSITIVE);
+                    m_search_state.mode() != SearchState::Case::SENSITIVE);
 
                 prev_match = basic_search_last(
-                    contents, m_last_search_pattern, 0, curr_line_offset,
-                    m_caseless_mode != CaselessSearchMode::SENSITIVE);
+                    contents, m_search_state.search_pattern(), 0,
+                    curr_line_offset,
+                    m_search_state.mode() != SearchState::Case::SENSITIVE);
 
                 if (prev_match == curr_line_offset &&
                     curr_line_match != curr_line_end) {
@@ -279,7 +282,7 @@ void Main::run() {
             m_highlight_active = true;
 
             // for now if search pattern is empty, we just break
-            if (m_last_search_pattern.empty()) {
+            if (m_search_state.search_pattern().empty()) {
                 break;
             }
 
@@ -311,14 +314,14 @@ void Main::run() {
                 size_t curr_line_end = curr_line_offset + curr_line.size();
 
                 curr_line_match = basic_search_first(
-                    contents, m_last_search_pattern, curr_line_offset,
+                    contents, m_search_state.search_pattern(), curr_line_offset,
                     curr_line_end,
-                    m_caseless_mode != CaselessSearchMode::SENSITIVE);
+                    m_search_state.mode() != SearchState::Case::SENSITIVE);
 
                 next_match = basic_search_first(
-                    contents, m_last_search_pattern, curr_line_end,
+                    contents, m_search_state.search_pattern(), curr_line_end,
                     end_of_file_offset,
-                    m_caseless_mode != CaselessSearchMode::SENSITIVE);
+                    m_search_state.mode() != SearchState::Case::SENSITIVE);
 
                 if (next_match == end_of_file_offset &&
                     curr_line_match != curr_line_end) {
@@ -355,19 +358,20 @@ void Main::run() {
             std::string_view contents = m_content_handle->get_contents();
 
             // update the search pattern
-            m_last_search_pattern = std::string{command.payload_str.begin(),
-                                                command.payload_str.end()};
+            m_search_state.set_search_pattern(command.payload_str);
             size_t left_bound = m_view.get_starting_offset();
             size_t right_bound = contents.size();
 
             size_t match = basic_search_first(
-                contents, m_last_search_pattern, left_bound, right_bound,
-                m_caseless_mode != CaselessSearchMode::SENSITIVE);
+                contents, m_search_state.search_pattern(), left_bound,
+                right_bound,
+                m_search_state.mode() != SearchState::Case::SENSITIVE);
             // TODO: optimize
             for (size_t i = 1; i < command.payload_num; ++i) {
                 size_t cur_match = basic_search_first(
-                    contents, m_last_search_pattern, match, right_bound,
-                    m_caseless_mode != CaselessSearchMode::SENSITIVE);
+                    contents, m_search_state.search_pattern(), match,
+                    right_bound,
+                    m_search_state.mode() != SearchState::Case::SENSITIVE);
                 if (cur_match == right_bound) {
                     break;
                 }
@@ -391,7 +395,7 @@ void Main::run() {
             break;
         }
         case Command::TOGGLE_HIGHLIGHTING: {
-            if (m_last_search_pattern.empty()) {
+            if (m_search_state.search_pattern().empty()) {
                 set_status("No previous search pattern.");
                 break;
             }
@@ -402,7 +406,7 @@ void Main::run() {
             break;
         }
         case Command::SEARCH_CLEAR: {
-            m_last_search_pattern.clear();
+            m_search_state.clear_search_pattern();
             set_command("", 0);
             m_highlight_active = false;
             set_status("Search cleared.");

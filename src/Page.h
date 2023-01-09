@@ -263,6 +263,11 @@ struct Page {
         return m_lines.back().end + 1 < contents.size();
     }
 
+    void move_to(std::string_view contents, size_t offset) {
+        *this = get_page_at_byte_offset(contents, offset, m_height, m_width,
+                                        m_wrap_lines);
+    }
+
     auto cbegin() const {
         return m_lines.cbegin();
     }

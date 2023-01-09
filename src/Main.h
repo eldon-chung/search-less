@@ -41,19 +41,13 @@ struct Main {
 
     bool m_highlight_active;
 
-    enum class CaselessSearchMode {
-        SENSITIVE,
-        CONDITIONALLY_SENSITIVE,
-        INSENSITIVE,
-    };
-    CaselessSearchMode m_caseless_mode;
+    SearchState m_search_state;
 
     std::string m_status_str_buffer;
     std::string m_command_str_buffer;
     size_t m_command_cursor_pos;
 
     std::vector<View::Highlight> m_highlight_offsets;
-    std::string m_last_search_pattern;
 
     size_t m_half_page_size;
     size_t m_page_size;
@@ -66,8 +60,7 @@ struct Main {
           m_input(&m_nc_mutex, &m_chan, tty, std::move(history_filename),
                   history_maxsize),
           m_taskmaster(&m_task_chan), m_highlight_active(true),
-          m_caseless_mode(CaselessSearchMode::SENSITIVE),
-          m_time_commands(time_commands) {
+          m_search_state(), m_time_commands(time_commands) {
         register_for_sigwinch_channel(&m_chan);
 
         display_page();

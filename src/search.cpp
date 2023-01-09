@@ -140,3 +140,43 @@ size_t basic_search_last(std::string_view file_contents,
 
     return result;
 }
+
+void search_first_n(std::string_view contents, SearchState &search_state) {
+
+    size_t iter = search_state.iter();
+    Page page = search_state.page();
+
+    for (size_t i = 0; i < iter; ++i) {
+
+        size_t curr_line_match, next_match;
+        std::string_view curr_line = page.get_nth_line(contents, 0);
+
+        size_t curr_line_offset = page.get_begin_offset();
+        size_t curr_line_end = curr_line_offset + curr_line.size();
+
+        curr_line_match = basic_search_first(
+            contents, search_state.search_pattern(), curr_line_offset,
+            curr_line_end, search_state.mode() != SearchState::Case::SENSITIVE);
+
+        next_match = basic_search_first(contents, search_state.search_pattern(),
+                                        curr_line_end, contents.size(),
+                                        search_state.mode() !=
+                                            SearchState::Case::SENSITIVE);
+
+        // need to update the search state
+        if (next_match == end_of_file_offset &&
+            curr_line_match != curr_line_end) {
+            set_status("(END)");
+            break;
+        } else if (next_match == end_of_file_offset &&
+                   curr_line_match == curr_line_end) {
+            set_status("Pattern not found");
+            break;
+        } else {
+            m_view.move_to_byte_offset(next_match);
+            if (!page.has_next(contents)) {
+                break;
+            }
+        }
+    }
+}

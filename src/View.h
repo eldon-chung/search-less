@@ -136,7 +136,9 @@ struct View {
     void move_to_end() {
 
         if (m_content_handle->has_changed()) {
+            size_t offset = m_page.get_begin_offset();
             m_content_handle->read_to_eof();
+            move_to_byte_offset(offset);
         }
 
         if (m_content_handle->get_contents().empty()) {
