@@ -1,7 +1,9 @@
 #include "search.h"
 
+#include <string.h>
+
 #include <algorithm>
-#include <cstring>
+#include <optional>
 #include <string>
 
 void tolower(const char *s, const char *end, char *out) {
@@ -31,7 +33,7 @@ std::vector<size_t> basic_search_all(std::string_view file_contents,
     while (true) {
         size_t offset = basic_search_first(
             file_contents, pattern, beginning_offset, ending_offset, caseless);
-        if (offset == ending_offset) {
+        if (offset == std::string::npos) {
             break;
         }
         out.push_back(offset);
@@ -43,13 +45,13 @@ std::vector<size_t> basic_search_all(std::string_view file_contents,
 size_t basic_search_first(std::string_view file_contents,
                           std::string_view pattern, size_t beginning_offset,
                           size_t ending_offset, bool caseless /* = false */) {
+
+    assert(!pattern.empty());
+
     std::string_view file_contents_substr = file_contents.substr(
         beginning_offset, ending_offset - beginning_offset);
     if (file_contents_substr.length() < pattern.length()) {
-        return ending_offset;
-    }
-    if (pattern.length() == 0) {
-        return beginning_offset;
+        return std::string::npos;
     }
     if (caseless) {
         std::string lower_pattern;
@@ -118,11 +120,11 @@ size_t basic_search_first(std::string_view file_contents,
             ++lower_file_ptr;
         }
 
-        return ending_offset;
+        return std::string::npos;
     } else {
         size_t pos = file_contents_substr.find(pattern);
         if (pos == std::string::npos) {
-            return ending_offset;
+            return std::string::npos;
         } else {
             return pos + beginning_offset;
         }
@@ -132,11 +134,13 @@ size_t basic_search_first(std::string_view file_contents,
 size_t basic_search_last(std::string_view file_contents,
                          std::string_view pattern, size_t beginning_offset,
                          size_t ending_offset, bool caseless /* = false */) {
-    size_t result = file_contents.rfind(pattern, ending_offset - 1);
-    if (result == std::string::npos || result < beginning_offset ||
-        result >= ending_offset) {
-        result = ending_offset;
-    }
+    std::string_view sub_contents = file_contents.substr(
+        beginning_offset, ending_offset - beginning_offset);
 
-    return result;
+    size_t result = sub_contents.rfind(pattern);
+    if (result == std::string::npos) {
+        return result;
+    } else {
+        return beginning_offset + result;
+    }
 }
