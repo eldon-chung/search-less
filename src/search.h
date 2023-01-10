@@ -71,7 +71,7 @@ class Search {
         m_is_running = true;
     }
 
-    void kill() {
+    void terminate() {
         m_is_running = false;
     }
 
@@ -123,11 +123,13 @@ class Search {
 
         // if the contents can't even fit the pattern
         if (contents.size() < m_pattern.size()) {
+            terminate();
             return;
         }
 
         // if our substring into the contents can't even fit the pattern
         if (m_ending_offset - m_starting_offset < m_pattern.size()) {
+            terminate();
             return;
         }
 
@@ -152,12 +154,17 @@ class Search {
         }
 
         // we did our iterations and we found the result
-        if (m_num_iter == 0 && result != std::string::npos) {
+        if (m_num_iter == 0) {
+            // this only happens when result is found
+            assert(result != std::string::npos);
             // add the result into the list of found positions
             m_found_positions.push_back(result);
-            m_is_running = false;
+            terminate();
             return;
         }
+
+        // at this point we might have found results but we didnt finish
+        // the number of iterations we needed
 
         // we have handled the case that the pattern can't fit
         assert(m_ending_offset - m_starting_offset >= m_pattern.size() - 1);
@@ -166,7 +173,7 @@ class Search {
         // if we're at the end of the whole contents right now
         // no more running needed
         if (chunk_end == contents.size() - 1) {
-            m_is_running = false;
+            terminate();
         }
     }
 
