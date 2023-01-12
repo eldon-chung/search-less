@@ -87,9 +87,6 @@ struct Page {
             return to_return;
         };
 
-        // note: need to handle the case where we're given an offset and can
-        // scroll further back up
-
         offset = round_to_width_offset(contents, offset, width);
 
         const char *base_addr = contents.data();
@@ -109,9 +106,12 @@ struct Page {
                 std::move(broken_lines.begin(), broken_lines.end(),
                           std::back_inserter(lines));
             } else {
-                // just push the entire thing into lines
+                // just push the at most width chars into the substr
+                // TODO: fix this for long lines when the user hits
+                // key_right
                 lines.push_back(from_string_view(
-                    base_addr, curr_content.substr(0, next_newl)));
+                    base_addr,
+                    curr_content.substr(0, std::min(next_newl - 1, width))));
             }
             // skip over the newl
             curr_content = curr_content.substr(next_newl + 1);
@@ -131,6 +131,10 @@ struct Page {
     std::string_view get_nth_line(std::string_view contents,
                                   size_t index) const {
         return from_page_line(contents.data(), m_lines[index]);
+    }
+
+    size_t get_nth_offset(size_t index) const {
+        return m_lines[index].start;
     }
 
     size_t get_num_lines() const {

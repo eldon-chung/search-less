@@ -6,6 +6,7 @@
 #include <future>
 #include <mutex>
 #include <ncurses.h>
+#include <optional>
 #include <signal.h>
 #include <stdio.h>
 #include <stop_token>
@@ -41,19 +42,19 @@ struct Main {
 
     bool m_highlight_active;
 
-    enum class CaselessSearchMode {
-        SENSITIVE,
-        CONDITIONALLY_SENSITIVE,
-        INSENSITIVE,
-    };
-    CaselessSearchMode m_caseless_mode;
+    Search::Case m_search_case;
 
     std::string m_status_str_buffer;
     std::string m_command_str_buffer;
     size_t m_command_cursor_pos;
 
+    std::optional<Search> m_search_state;
     std::vector<View::Highlight> m_highlight_offsets;
-    std::string m_last_search_pattern;
+    // this is to help highlight stuff on screen so it persists beyond
+    // the search state (which is only valid until the job is done)
+    SearchResult m_search_result;
+
+    std::optional<Command> prev_command;
 
     size_t m_half_page_size;
     size_t m_page_size;
@@ -66,7 +67,8 @@ struct Main {
           m_input(&m_nc_mutex, &m_chan, tty, std::move(history_filename),
                   history_maxsize),
           m_taskmaster(&m_task_chan), m_highlight_active(true),
-          m_caseless_mode(CaselessSearchMode::SENSITIVE),
+          m_search_case(Search::Case::SENSITIVE),
+          m_search_result({"", std::string::npos}),
           m_time_commands(time_commands) {
         register_for_sigwinch_channel(&m_chan);
 
@@ -107,6 +109,9 @@ struct Main {
 
     void display_page();
     void display_command_or_status();
+
+    void run_search();
+    bool run_main();
 
     void set_command(std::string command, size_t cursor_pos) {
         m_command_str_buffer = std::move(command);

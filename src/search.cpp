@@ -37,7 +37,8 @@ std::vector<size_t> basic_search_all(std::string_view file_contents,
             break;
         }
         out.push_back(offset);
-        beginning_offset = offset + 1;
+        // i think this is flawed
+        beginning_offset = offset + pattern.size();
     }
     return out;
 }
