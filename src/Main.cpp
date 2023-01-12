@@ -428,14 +428,34 @@ void Main::run_search() {
     // and we need to process the current state
     assert(m_search_state->num_iter() >= 1);
 
+    if (m_search_state->has_result() && m_search_state->num_iter() == 1) {
+    }
+
+    // case 1: we can run more
+    // if our current iteration was successful
+    if (m_search_state->has_result() && m_search_state->num_iter() >= 2) {
+        --(m_search_state->num_iter());
+        m_search_state->schedule();
+        return;
+    }
+
+    // case 2: we can run more
+    // if our current iteration was unsuccessful
+    // because we needed more
+    if (m_search_state->need_more() && m_content_handle->has_changed()) {
+        m_content_handle->read_more();
+        m_search_state->give_more();
+        m_search_state->schedule();
+        return;
+    }
+
+    // case 3: we can't run more (and we can't give more)
+
     if (m_search_state->has_result()) {
         if (m_search_state->num_iter() >= 2) {
             // subtract iterations by 1, schedule again
-            --(m_search_state->num_iter());
-            m_search_state->schedule();
 
-        } else {
-            assert(m_search_state->num_iter() == 1);
+        } else if () {
             m_view.move_to_byte_offset(m_search_state->result());
             m_search_result = {m_search_state->pattern(),
                                m_search_state->result()};

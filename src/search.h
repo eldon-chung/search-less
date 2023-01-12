@@ -39,6 +39,7 @@ class Search {
 
   private:
     size_t m_found_position;
+    size_t m_current_result;
     // can we merge these two?
     std::string m_pattern;
     size_t m_starting_offset;
@@ -85,19 +86,32 @@ class Search {
         m_is_running = true;
     }
 
+    size_t starting() const {
+        return m_starting_offset;
+    }
+
     // entry point that dispatches the corresponding algorithms
     void run(std::string_view contents) {
-        std::vector<size_t> results;
         switch (m_mode) {
         case Mode::NEXT:
-            m_found_position = find_next(contents);
+            m_current_result = find_next(contents);
+            if (m_current_result != std::string::npos) {
+                m_found_position = m_current_result;
+            }
             break;
         case Mode::PREV:
-            m_found_position = find_prev(contents);
+            m_current_result = find_prev(contents);
+            if (m_current_result != std::string::npos) {
+                m_found_position = m_current_result;
+            }
             break;
         default:
             break;
         }
+    }
+
+    bool can_search_more() const {
+        return m_ending_offset - m_starting_offset >= m_pattern.size();
     }
 
     bool is_done() const {
@@ -105,6 +119,10 @@ class Search {
     }
 
     bool has_result() const {
+        return m_current_result != std::string::npos;
+    }
+
+    bool has_position() const {
         return m_found_position != std::string::npos;
     }
 
@@ -158,6 +176,7 @@ class Search {
         // update the starting offset
         if (result != std::string::npos) {
             // skip by length of pattern
+            m_starting_offset = result + m_pattern.length();
             terminate();
         } else {
             m_starting_offset = chunk_end - m_pattern.length() + 1;
