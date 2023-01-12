@@ -50,14 +50,23 @@ class Search {
     bool m_is_running;
     bool m_need_more;
 
+  private:
+    size_t mode_to_start(Mode mode, size_t offset) {
+        return (mode == Mode::NEXT) ? offset : 0;
+    }
+
+    size_t mode_to_end(Mode mode, size_t offset) {
+        return (mode == Mode::NEXT) ? std::string::npos : offset;
+    }
+
   public:
-    Search(std::string pattern, size_t starting_offset, size_t ending_offset,
-           Mode mode = Mode::NEXT, Case sensitivity = Case::INSENSITIVE,
-           size_t num_iter = 1)
+    Search(std::string pattern, Mode mode, size_t offset,
+           Case sensitivity = Case::INSENSITIVE, size_t num_iter = 1)
         : m_found_position(std::string::npos), m_pattern(std::move(pattern)),
-          m_starting_offset(starting_offset), m_ending_offset(ending_offset),
-          m_mode(mode), m_case(sensitivity), m_num_iter(num_iter),
-          m_is_running(true), m_need_more(false) {
+          m_starting_offset(mode_to_start(mode, offset)),
+          m_ending_offset(mode_to_end(mode, offset)), m_mode(mode),
+          m_case(sensitivity), m_num_iter(num_iter), m_is_running(true),
+          m_need_more(false) {
         assert(!m_pattern.empty());
         // assert(m_starting_offset < m_ending_offset);
     }
@@ -66,19 +75,12 @@ class Search {
         return m_num_iter;
     }
 
-    bool need_more() const {
-        return m_need_more;
+    bool needs_more(size_t content_length) const {
+        return (m_mode == Mode::NEXT) &&
+               (m_pattern.size() + m_starting_offset > content_length);
     }
 
-    void ask_for_more() {
-        m_need_more = true;
-    }
-
-    void give_more() {
-        m_need_more = false;
-    }
-
-    void terminate() {
+    void yield() {
         m_is_running = false;
     }
 
@@ -126,7 +128,7 @@ class Search {
         return m_found_position != std::string::npos;
     }
 
-    size_t result() const {
+    size_t found_position() const {
         return m_found_position;
     }
 
@@ -144,48 +146,31 @@ class Search {
 
         size_t result = std::string::npos;
 
-        if (m_starting_offset >= m_ending_offset) {
-            terminate();
-            return result;
-        }
-
-        // if the contents can't even fit the pattern
-        if (contents.size() < m_pattern.size()) {
-            ask_for_more();
-            terminate();
-            return result;
-        }
-
-        // if our substring into the contents can't even fit the pattern
-        if (m_ending_offset - m_starting_offset < m_pattern.size()) {
-            ask_for_more();
-            terminate();
+        // if the remaining contents can't fit the pattern
+        if (m_starting_offset + m_pattern.size() > contents.size()) {
+            yield();
             return result;
         }
 
         // create an ending index that we need to stop our search
-        size_t chunk_end = std::min(m_ending_offset, contents.size());
-
-        if (m_starting_offset < SIZE_MAX - Search::SEARCH_BLOCK_SIZE) {
-            chunk_end = std::min(chunk_end,
-                                 m_starting_offset + Search::SEARCH_BLOCK_SIZE);
-        }
+        size_t chunk_end = std::min(
+            m_starting_offset + Search::SEARCH_BLOCK_SIZE, contents.size());
 
         result = basic_search_first(contents, m_pattern, m_starting_offset,
                                     chunk_end, m_case == Case::INSENSITIVE);
+
         // update the starting offset
         if (result != std::string::npos) {
             // skip by length of pattern
             m_starting_offset = result + m_pattern.length();
-            terminate();
+            yield();
         } else {
             m_starting_offset = chunk_end - m_pattern.length() + 1;
         }
 
-        // if we've hit the end we can just terminate
+        // if we've hit the end we can just yield
         if (chunk_end == contents.size()) {
-            ask_for_more();
-            terminate();
+            yield();
         }
 
         return result;
@@ -198,26 +183,15 @@ class Search {
 
         size_t result = std::string::npos;
 
-        if (m_starting_offset >= m_ending_offset) {
-            terminate();
-            return result;
-        }
-
-        // if the contents can't even fit the pattern
-        if (contents.size() < m_pattern.size()) {
-            terminate();
-            return result;
-        }
-
-        // if our substring into the contents can't even fit the pattern
-        if (m_ending_offset - m_starting_offset < m_pattern.size()) {
-            terminate();
+        // if the remaining contents can't even fit the pattern
+        if (m_ending_offset < m_pattern.size()) {
+            yield();
             return result;
         }
 
         // create an starting index that we need to stop our search
-        size_t chunk_start = m_starting_offset;
-        if (m_ending_offset >= m_starting_offset + Search::SEARCH_BLOCK_SIZE) {
+        size_t chunk_start = 0;
+        if (m_ending_offset > m_starting_offset + Search::SEARCH_BLOCK_SIZE) {
             chunk_start = m_ending_offset - Search::SEARCH_BLOCK_SIZE;
         }
 
@@ -227,23 +201,14 @@ class Search {
 
         if (result != std::string::npos) {
             m_ending_offset = result;
-            terminate();
+            yield();
         } else {
-            m_ending_offset = m_starting_offset + m_pattern.length() - 1;
+            m_ending_offset = chunk_start + m_pattern.length() - 1;
         }
-
-        if (chunk_start == m_starting_offset) {
-            terminate();
-        }
-
-        // otherwise we still have iterations but we have ended from the chunk
-        // assert(chunk_end - m_starting_offset >= m_pattern.size() - 1);
-        // set this as the next position to start from next round
-        m_ending_offset = chunk_start + m_pattern.size() - 1;
 
         // we have hit BOF
         if (chunk_start == 0) {
-            terminate();
+            yield();
         }
 
         return result;

@@ -247,14 +247,13 @@ bool Main::run_main() {
         }
 
         std::string search_pattern = std::string(m_search_result.pattern());
-        size_t start = 0;
         size_t end = m_view.get_starting_offset();
         if (m_search_result.has_result()) {
             end = std::max(end, m_search_result.offset());
         }
 
         m_search_state =
-            Search(std::move(search_pattern), start, end, Search::Mode::PREV,
+            Search(std::move(search_pattern), Search::Mode::PREV, end,
                    m_search_case, std::max((size_t)1, command.payload_num));
 
         m_search_state->schedule();
@@ -282,10 +281,9 @@ bool Main::run_main() {
         } else {
             start = m_search_result.offset() + m_search_result.pattern().size();
         }
-        size_t end = std::string::npos;
 
         m_search_state =
-            Search(std::move(search_pattern), start, end, Search::Mode::NEXT,
+            Search(std::move(search_pattern), Search::Mode::NEXT, start,
                    m_search_case, std::max((size_t)1, command.payload_num));
 
         m_search_state->schedule();
@@ -299,12 +297,12 @@ bool Main::run_main() {
 
         std::string search_pattern = command.payload_str;
         size_t start = m_view.get_starting_offset();
-        size_t end = std::string::npos;
 
         m_search_state =
-            Search(std::move(search_pattern), start, end, Search::Mode::NEXT,
+            Search(std::move(search_pattern), Search::Mode::NEXT, start,
                    m_search_case, std::max((size_t)1, command.payload_num));
 
+        m_search_result.clear();
         m_search_state->schedule();
 
         m_view.display_status("searching...");
@@ -428,55 +426,52 @@ void Main::run_search() {
     // and we need to process the current state
     assert(m_search_state->num_iter() >= 1);
 
-    if (m_search_state->has_result() && m_search_state->num_iter() == 1) {
-    }
-
-    // case 1: we can run more
-    // if our current iteration was successful
-    if (m_search_state->has_result() && m_search_state->num_iter() >= 2) {
-        --(m_search_state->num_iter());
-        m_search_state->schedule();
-        return;
-    }
-
-    // case 2: we can run more
-    // if our current iteration was unsuccessful
-    // because we needed more
-    if (m_search_state->need_more() && m_content_handle->has_changed()) {
-        m_content_handle->read_more();
-        m_search_state->give_more();
-        m_search_state->schedule();
-        return;
-    }
-
-    // case 3: we can't run more (and we can't give more)
-
-    if (m_search_state->has_result()) {
-        if (m_search_state->num_iter() >= 2) {
-            // subtract iterations by 1, schedule again
-
-        } else if () {
-            m_view.move_to_byte_offset(m_search_state->result());
-            m_search_result = {m_search_state->pattern(),
-                               m_search_state->result()};
-            m_highlight_active = true;
-            display_page();
-            m_search_state = std::nullopt;
-            m_view.display_status("found result");
+    auto handle_success = [this]() {
+        if (m_search_state->found_position() >= m_view.get_ending_offset() ||
+            m_search_state->found_position() < m_view.get_starting_offset()) {
+            m_view.move_to_byte_offset(m_search_state->found_position());
         }
-    } else if (m_search_state->need_more() && m_content_handle->has_changed()) {
-        // we hit EOF and we can provide more
-        m_content_handle->read_more();
-        m_search_state->give_more();
-        m_search_state->schedule();
-
-    } else {
-        // else it needs more and we can't provide or
-        // we hit BOF
-        m_view.display_status("Pattern not found");
-        m_search_result = {m_search_state->pattern(), std::string::npos};
+        m_search_result = {m_search_state->pattern(),
+                           m_search_state->found_position()};
+        m_highlight_active = true;
+        display_page();
         m_search_state = std::nullopt;
+        m_search_result = {m_search_state->pattern(),
+                           m_search_state->found_position()};
+        m_view.display_status("found result");
+    };
+
+    // if the current iteration has found something new
+    if (m_search_state->has_result()) {
+        if (--(m_search_state->num_iter()) == 0) {
+            handle_success();
+        } else {
+            m_search_state->schedule();
+        }
+        return;
     }
+
+    // if we need more content and can provide
+    if (m_search_state->needs_more(m_content_handle->size()) &&
+        m_content_handle->has_changed()) {
+        m_content_handle->read_more();
+        m_search_state->schedule();
+        return;
+    }
+
+    // if we have a prior success
+    if (m_search_state->has_position()) {
+        handle_success();
+        return;
+    }
+
+    // else we don't have anything to show for it
+    m_view.display_status("Pattern not found");
+    if (!m_search_result.has_pattern()) {
+        // then this is a fresh new search
+        m_search_result = {m_search_state->pattern(), std::string::npos};
+    }
+    m_search_state = std::nullopt;
 }
 
 void Main::run() {
