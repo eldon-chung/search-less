@@ -1,11 +1,12 @@
 #include <stdio.h>
+
+#include <errno.h>
+#include <fcntl.h>
+#include <optional>
 #include <readline/history.h>
 #include <readline/readline.h>
 #include <sys/stat.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <unistd.h>
-#include <optional>
 #include <utility>
 
 #include "Command.h"
@@ -17,9 +18,14 @@ void handle_sigwinch(int) {
     command_channel->push_signal(Command{Command::RESIZE});
 }
 
-void register_for_sigwinch_channel(Channel<Command> *to_register) {
+void handle_sigint(int) {
+    command_channel->push_signal(Command{Command::INTERRUPT});
+}
+
+void register_signal_handlers(Channel<Command> *to_register) {
     command_channel = to_register;
     signal(SIGWINCH, handle_sigwinch);
+    signal(SIGINT, handle_sigint);
 }
 
 InputThread::InputThread(std::mutex *nc_mutex, Channel<Command> *chan,

@@ -57,7 +57,8 @@ struct View {
         start_color();
         use_default_colors();
         noecho();
-        raw();
+        // raw();
+        cbreak();
         curs_set(0);
         keypad(stdscr, TRUE);
         nodelay(stdscr, TRUE);
@@ -144,11 +145,6 @@ struct View {
     }
 
     void move_to_end() {
-
-        if (m_content_handle->has_changed()) {
-            m_content_handle->read_to_eof();
-        }
-
         if (m_content_handle->get_contents().empty()) {
             return;
         }

@@ -99,6 +99,11 @@ bool Main::run_main() {
 
     Command command = m_chan.pop().value();
     prev_command = command;
+
+    if (m_following_eof && command.type != Command::INTERRUPT) {
+        return false;
+    }
+
     switch (command.type) {
     case Command::INVALID:
         m_view.display_status("Invalid key pressed: " + command.payload_str);
@@ -113,7 +118,7 @@ bool Main::run_main() {
         m_chan.close();
         m_task_chan.close();
         m_file_task_stop_source.request_stop();
-        break;
+        return true;
     case Command::VIEW_DOWN:
         m_view.scroll_down(std::max(command.payload_num, (size_t)1));
         display_page();
@@ -156,6 +161,9 @@ bool Main::run_main() {
         }
         break;
     case Command::VIEW_EOF:
+        if (m_content_handle->has_changed()) {
+            m_content_handle->read_to_eof();
+        }
         m_view.move_to_end();
         display_page();
         if (!m_status_str_buffer.empty()) {
@@ -312,6 +320,14 @@ bool Main::run_main() {
         // m_model.update_line_idxs(command.payload_nums);
         break;
     }
+    case Command::FOLLOW_EOF: {
+        m_following_eof = true;
+        {
+            std::scoped_lock lock(m_nc_mutex);
+            ungetch(133769420);
+        }
+        break;
+    }
     case Command::TOGGLE_HIGHLIGHTING: {
         if (!m_search_result.has_pattern()) {
             set_status("No previous search pattern.");
@@ -332,7 +348,17 @@ bool Main::run_main() {
         display_page();
         break;
     }
+    case Command::INTERRUPT: {
+        m_following_eof = false;
+        {
+            std::scoped_lock lock(m_nc_mutex);
+            ungetch(69420);
+        }
+        set_status("");
+        break;
     }
+    }
+
     if (command.type == Command::QUIT) {
         return true;
     } else {
@@ -474,6 +500,16 @@ void Main::run_search() {
     m_search_state = std::nullopt;
 }
 
+void Main::run_follow_eof() {
+    if (m_content_handle->has_changed()) {
+        m_content_handle->read_to_eof();
+    }
+    m_view.move_to_end();
+    display_page();
+
+    m_view.display_status("Waiting for data... (interrupt to abort)");
+}
+
 void Main::run() {
     while (true) {
         if (run_main()) {
@@ -481,6 +517,9 @@ void Main::run() {
         }
         if (m_search_state.has_value()) {
             run_search();
+        }
+        if (m_following_eof) {
+            run_follow_eof();
         }
     }
 }

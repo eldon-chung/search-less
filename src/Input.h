@@ -12,6 +12,7 @@
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <string>
 #include <sys/ioctl.h>
 #include <sys/select.h>
@@ -110,9 +111,16 @@ struct InputThread {
             case KEY_RESIZE:
                 chan->push(Command{Command::RESIZE});
                 break;
+            case 133769420:
+                // starts the ignoring mode
+                while (poll_and_getch() != 69420) {
+                    ; // only main can break us out
+                }
+                break;
             case 'q':
                 chan->push({Command::QUIT});
-                return; // Kill input thread
+                // return; // Kill input thread
+                return;
             case 'j':
             case KEY_DOWN:
                 chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
@@ -122,6 +130,9 @@ struct InputThread {
             case KEY_UP:
                 chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
                 chan->push({Command::VIEW_UP, "", {}, num_payload});
+                break;
+            case 'F':
+                chan->push({Command::FOLLOW_EOF, "", {}, 1});
                 break;
             case 'f':
             case CTRL('f'):
@@ -244,4 +255,4 @@ struct InputThread {
     }
 };
 
-void register_for_sigwinch_channel(Channel<Command> *to_register);
+void register_signal_handlers(Channel<Command> *to_register);

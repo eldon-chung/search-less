@@ -56,6 +56,8 @@ struct Main {
 
     std::optional<Command> prev_command;
 
+    bool m_following_eof;
+
     size_t m_half_page_size;
     size_t m_page_size;
     bool m_time_commands;
@@ -68,9 +70,9 @@ struct Main {
                   history_maxsize),
           m_taskmaster(&m_task_chan), m_highlight_active(true),
           m_search_case(Search::Case::SENSITIVE),
-          m_search_result({"", std::string::npos}),
+          m_search_result({"", std::string::npos}), m_following_eof(false),
           m_time_commands(time_commands) {
-        register_for_sigwinch_channel(&m_chan);
+        register_signal_handlers(&m_chan);
 
         display_page();
         display_command_or_status();
@@ -112,6 +114,7 @@ struct Main {
 
     void run_search();
     bool run_main();
+    void run_follow_eof();
 
     void set_command(std::string command, size_t cursor_pos) {
         m_command_str_buffer = std::move(command);

@@ -31,6 +31,8 @@ struct Command {
         UPDATE_LINE_IDXS,
         SEARCH_CLEAR,
         TOGGLE_HIGHLIGHTING,
+        INTERRUPT,
+        FOLLOW_EOF,
     };
     Type type;
     std::string payload_str;
