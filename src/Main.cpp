@@ -322,10 +322,6 @@ bool Main::run_main() {
     }
     case Command::FOLLOW_EOF: {
         m_following_eof = true;
-        {
-            std::scoped_lock lock(m_nc_mutex);
-            ungetch(133769420);
-        }
         break;
     }
     case Command::TOGGLE_HIGHLIGHTING: {
@@ -349,11 +345,14 @@ bool Main::run_main() {
         break;
     }
     case Command::INTERRUPT: {
-        m_following_eof = false;
-        {
-            std::scoped_lock lock(m_nc_mutex);
-            ungetch(69420);
+        if (m_following_eof) {
+            m_following_eof = false;
+            {
+                std::scoped_lock lock(m_nc_mutex);
+                ungetch(69420);
+            }
         }
+        set_command("", 0);
         set_status("");
         break;
     }

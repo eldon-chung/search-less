@@ -111,12 +111,6 @@ struct InputThread {
             case KEY_RESIZE:
                 chan->push(Command{Command::RESIZE});
                 break;
-            case 133769420:
-                // starts the ignoring mode
-                while (poll_and_getch() != 69420) {
-                    ; // only main can break us out
-                }
-                break;
             case 'q':
                 chan->push({Command::QUIT});
                 // return; // Kill input thread
@@ -133,6 +127,10 @@ struct InputThread {
                 break;
             case 'F':
                 chan->push({Command::FOLLOW_EOF, "", {}, 1});
+                // wait for main to break us out
+                while (poll_and_getch() != 69420) {
+                    ; // only main can break us out
+                }
                 break;
             case 'f':
             case CTRL('f'):
