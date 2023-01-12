@@ -83,7 +83,7 @@ void Main::display_command_or_status() {
 
 bool Main::run_main() {
 
-    if (m_chan.empty() && m_search_state.has_value()) {
+    if (m_chan.empty() && (m_search_state.has_value() || m_following_eof)) {
         // if there isn't a command and there is an ongoing search
         // we can just continue the search
         return false;
@@ -505,7 +505,6 @@ void Main::run_follow_eof() {
     }
     m_view.move_to_end();
     display_page();
-
     m_view.display_status("Waiting for data... (interrupt to abort)");
 }
 

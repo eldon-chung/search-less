@@ -66,7 +66,7 @@ template <typename T> struct Channel {
         std::unique_lock lock(mut);
         // either the queue is empty
         // or it isn't but it's not for us to read
-        return que.empty() || !(sig_que_state & 0x2);
+        return que.empty() && !(sig_que_state & 0x2);
     }
 
     void close() {
