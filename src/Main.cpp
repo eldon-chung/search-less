@@ -68,6 +68,13 @@ void Main::display_command_or_status() {
 }
 
 bool Main::run_main() {
+
+    if (m_chan.empty() && m_search_state.has_value()) {
+        // if there isn't a command and there is an ongoing search
+        // we can just continue the search
+        return false;
+    }
+
     if (m_time_commands && prev_command) {
         fprintf(stderr, "Time taken for command %d: %ld ns\n",
                 prev_command->type,
@@ -76,14 +83,7 @@ bool Main::run_main() {
                     .count());
     }
 
-    std::optional<Command> maybe_command = m_chan.pop();
-
-    // might get a timeout tick
-    if (!maybe_command.has_value()) {
-        return false;
-    }
-
-    Command command = maybe_command.value();
+    Command command = m_chan.pop().value();
     prev_command = command;
     switch (command.type) {
     case Command::INVALID:
@@ -266,6 +266,8 @@ bool Main::run_main() {
             start = m_search_result.offset() + m_search_result.pattern().size();
         }
         size_t end = std::string::npos;
+
+        fprintf(stderr, "starting value: %zu\n", start);
 
         m_search_state =
             Search(std::move(search_pattern), start, end, Search::Mode::NEXT,

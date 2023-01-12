@@ -146,10 +146,10 @@ class Search {
         }
 
         // create an ending index that we need to stop our search
-        size_t chunk_end = std::min(m_ending_offset, contents.size() - 1);
+        size_t chunk_end = std::min(m_ending_offset, contents.size());
 
         if (m_starting_offset < SIZE_MAX - Search::SEARCH_BLOCK_SIZE) {
-            chunk_end = std::min(m_ending_offset,
+            chunk_end = std::min(chunk_end,
                                  m_starting_offset + Search::SEARCH_BLOCK_SIZE);
         }
 
@@ -158,14 +158,13 @@ class Search {
         // update the starting offset
         if (result != std::string::npos) {
             // skip by length of pattern
-            m_starting_offset = result + m_pattern.length();
             terminate();
         } else {
             m_starting_offset = chunk_end - m_pattern.length() + 1;
         }
 
         // if we've hit the end we can just terminate
-        if (chunk_end == m_ending_offset) {
+        if (chunk_end == contents.size()) {
             ask_for_more();
             terminate();
         }

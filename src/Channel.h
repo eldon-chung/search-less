@@ -18,7 +18,7 @@ template <typename T> struct Channel {
     std::atomic<char> sig_que_state;
     T sig_que;
 
-    std::mutex mut;
+    mutable std::mutex mut;
     std::condition_variable cond;
 
     void push(T v) {
@@ -60,6 +60,13 @@ template <typename T> struct Channel {
 
         // queue is empty, so channel is closed
         return std::nullopt;
+    }
+
+    bool empty() const {
+        std::unique_lock lock(mut);
+        // either the queue is empty
+        // or it isn't but it's not for us to read
+        return que.empty() || !(sig_que_state & 0x2);
     }
 
     void close() {
