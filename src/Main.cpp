@@ -18,7 +18,7 @@
 // this a static method that takes in params
 void Main::update_screen_highlight_offsets() {
 
-    if (!m_search_result.has_result()) {
+    if (!m_search_result.has_pattern()) {
         return;
     }
 
@@ -26,23 +26,37 @@ void Main::update_screen_highlight_offsets() {
     // that are visible on the screen right now.
 
     Page page = m_view.current_page();
+    size_t main_result_offset = m_search_result.offset();
+    size_t main_result_length = m_search_result.length();
+
     m_highlight_offsets.clear();
 
+    std::vector<View::Highlight> line_highlights;
     for (size_t idx = 0; idx < page.get_num_lines(); ++idx) {
         auto page_line =
             page.get_nth_line(m_content_handle->get_contents(), idx);
+        size_t line_base_offset = page.get_nth_offset(idx);
+
+        // this is already relative to our visual line
         auto line_offsets = basic_search_all(
             page_line, m_search_result.pattern(), 0, page_line.size(),
             m_search_case != Search::Case::INSENSITIVE);
 
-        if (!line_offsets.empty()) {
-            for (auto offset : line_offsets) {
-                m_highlight_offsets.push_back(
-                    {page.get_nth_offset(idx) + offset,
-                     m_search_result.pattern().length()});
+        line_highlights.clear();
+        line_highlights.reserve(line_offsets.size());
+
+        for (size_t offset : line_offsets) {
+            using enum View::Highlight::Type;
+            if (offset + line_base_offset == main_result_offset) {
+                line_highlights.push_back({offset, main_result_length, Main});
+            } else {
+                line_highlights.push_back({offset, main_result_length, Side});
             }
         }
+
+        m_highlight_offsets.push_back(std::move(line_highlights));
     }
+    assert(m_highlight_offsets.size() == page.get_num_lines());
 }
 
 void Main::display_page() {
@@ -235,6 +249,9 @@ bool Main::run_main() {
         std::string search_pattern = std::string(m_search_result.pattern());
         size_t start = 0;
         size_t end = m_view.get_starting_offset();
+        if (m_search_result.has_result()) {
+            end = std::max(end, m_search_result.offset());
+        }
 
         m_search_state =
             Search(std::move(search_pattern), start, end, Search::Mode::PREV,
@@ -266,8 +283,6 @@ bool Main::run_main() {
             start = m_search_result.offset() + m_search_result.pattern().size();
         }
         size_t end = std::string::npos;
-
-        fprintf(stderr, "starting value: %zu\n", start);
 
         m_search_state =
             Search(std::move(search_pattern), start, end, Search::Mode::NEXT,

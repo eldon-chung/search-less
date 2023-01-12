@@ -30,6 +30,12 @@ inline std::string_view strip_trailing_rn(std::string_view str) {
 //  thing that just holds a text_window, and given the state that needs to be
 //  rendered drives the entire rendering logic
 struct View {
+
+    enum class ColorPair {
+        MAIN_RESULT = 0,
+        SIDE_RESULT = 8,
+    };
+
     std::mutex *m_nc_mutex;
     WINDOW *m_main_window_ptr;
     WINDOW *m_command_window_ptr;
@@ -55,6 +61,10 @@ struct View {
         curs_set(0);
         keypad(stdscr, TRUE);
         nodelay(stdscr, TRUE);
+
+        // initialise some colours
+        // init_pair((short)ColorPair::MAIN_RESULT, COLOR_WHITE, COLOR_BLACK);
+        init_pair((short)ColorPair::SIDE_RESULT, -1, COLOR_RED);
 
         // Get the screen height and width
         int height, width;
@@ -160,23 +170,34 @@ struct View {
     }
 
     struct Highlight {
-        size_t offset;
-        size_t length;
-        size_t get_begin_offset() const {
-            return offset;
+        enum class Type { Main, Side };
+
+        size_t m_offset;
+        size_t m_length;
+        Type m_type;
+
+        size_t begin_offset() const {
+            return m_offset;
         }
-        size_t get_end_offset() const {
-            return offset + length;
+        size_t end_offset() const {
+            return m_offset + m_length;
+        }
+        size_t length() const {
+            return m_length;
+        }
+        Type type() const {
+            return m_type;
         }
     };
 
-    void display_page_at(std::vector<Highlight> highlight_list) {
+    void display_page_at(std::vector<std::vector<Highlight>> highlight_list) {
 
         std::scoped_lock lock(*m_nc_mutex);
 
         werase(m_main_window_ptr);
 
         Page page = current_page();
+        // assert(highlight_list.size() == page.get_num_lines());
 
         for (size_t row_idx = 0; row_idx < m_main_window_height; ++row_idx) {
             if (row_idx < page.get_num_lines()) {
@@ -192,33 +213,28 @@ struct View {
         wstandend(m_main_window_ptr);
 
         // split the highlights based on row
+        auto put_highlights = [](Highlight const &highlight, size_t row_idx,
+                                 size_t m_main_window_width,
+                                 WINDOW *m_main_window_ptr) {
+            size_t actual_length =
+                std::min(highlight.length(),
+                         m_main_window_width - highlight.begin_offset());
+            attr_t attr = (highlight.type() == Highlight::Type::Main)
+                              ? WA_STANDOUT
+                              : WA_NORMAL;
+            using enum ColorPair;
+            short colour = (short)((highlight.type() == Highlight::Type::Main)
+                                       ? MAIN_RESULT
+                                       : SIDE_RESULT);
 
-        auto highlight_it = highlight_list.cbegin();
-        const char *base_addr = m_content_handle->get_contents().data();
+            mvwchgat(m_main_window_ptr, row_idx, highlight.begin_offset(),
+                     actual_length, attr, colour, 0);
+        };
 
-        for (size_t row_idx = 0; row_idx < m_main_window_height &&
-                                 highlight_it != highlight_list.cend();
-             ++row_idx) {
-            std::string_view curr_line =
-                page.get_nth_line(m_content_handle->get_contents(), row_idx);
-            size_t starting_offset = (size_t)(curr_line.data() - base_addr);
-            size_t ending_offset =
-                (size_t)(curr_line.data() + curr_line.size() - base_addr);
-
-            ending_offset =
-                std::min(ending_offset, starting_offset + m_main_window_width);
-
-            while (highlight_it != highlight_list.cend() &&
-                   highlight_it->offset >= starting_offset &&
-                   highlight_it->offset < ending_offset) {
-
-                size_t highlight_len = std::min(
-                    highlight_it->length,
-                    starting_offset + ending_offset - highlight_it->offset);
-                mvwchgat(m_main_window_ptr, row_idx,
-                         highlight_it->offset - starting_offset, highlight_len,
-                         WA_STANDOUT, 0, 0);
-                ++highlight_it;
+        for (size_t row_idx = 0; row_idx < highlight_list.size(); ++row_idx) {
+            for (auto const &highlight : highlight_list[row_idx]) {
+                put_highlights(highlight, row_idx, m_main_window_width,
+                               m_main_window_ptr);
             }
         }
 

@@ -49,7 +49,7 @@ struct Main {
     size_t m_command_cursor_pos;
 
     std::optional<Search> m_search_state;
-    std::vector<View::Highlight> m_highlight_offsets;
+    std::vector<std::vector<View::Highlight>> m_highlight_offsets;
     // this is to help highlight stuff on screen so it persists beyond
     // the search state (which is only valid until the job is done)
     SearchResult m_search_result;

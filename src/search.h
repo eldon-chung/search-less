@@ -240,6 +240,10 @@ struct SearchResult {
         return m_search_pattern;
     }
 
+    size_t length() const {
+        return m_search_pattern.size();
+    }
+
     bool has_pattern() const {
         return !m_search_pattern.empty();
     }
