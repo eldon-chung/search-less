@@ -17,13 +17,20 @@ other calls you might make to it.
 struct Page {
 
     struct PageLine {
+        // stores the offsets relative
+        // to a base ptr
         size_t start;
         size_t end;
+
+        size_t length() const {
+            return start - end;
+        }
     };
 
     std::deque<PageLine> m_lines;
     // eventually remove this
     size_t m_global_offset;
+    size_t m_chunk_idx;
 
     // Invariants
     size_t m_width;
@@ -69,8 +76,8 @@ struct Page {
   public:
     static Page get_page_at_byte_offset(std::string_view contents,
                                         size_t offset, size_t height,
-                                        size_t width, bool wrap_lines) {
-
+                                        size_t width, bool wrap_lines = true,
+                                        bool auto_scroll_right = true) {
         auto break_into_wrapped_lines =
             [](const char *base_addr, size_t width,
                std::string_view content) -> std::deque<PageLine> {
@@ -89,6 +96,11 @@ struct Page {
 
         offset = round_to_width_offset(contents, offset, width);
 
+        // precompute this for the non wrapping cases
+        // only do this if auto_scroll_right is true
+        size_t non_wrapping_chunk_idx =
+            (auto_scroll_right) ? offset / width : 0;
+
         const char *base_addr = contents.data();
         std::string_view curr_content = contents.substr(offset);
         std::deque<PageLine> lines;
@@ -96,7 +108,8 @@ struct Page {
             size_t next_newl = curr_content.find_first_of("\n");
             if (next_newl == std::string::npos) {
                 // if we can't find it take it to the end
-                next_newl = curr_content.size() - 1;
+                // note: why did I write next_newl - 1 before this?
+                next_newl = curr_content.size();
             }
             if (wrap_lines) {
                 // break the current line into multiple string views
@@ -107,18 +120,24 @@ struct Page {
                           std::back_inserter(lines));
             } else {
                 // just push the at most width chars into the substr
-                // TODO: fix this for long lines when the user hits
-                // key_right
+                // but start at the correct offset
                 lines.push_back(from_string_view(
                     base_addr,
-                    curr_content.substr(0, std::min(next_newl - 1, width))));
+                    curr_content.substr(width * non_wrapping_chunk_idx,
+                                        std::min(next_newl - 1, width))));
             }
-            // skip over the newl
-            curr_content = curr_content.substr(next_newl + 1);
+            if (next_newl < curr_content.size()) {
+                // skip over the newl
+                curr_content = curr_content.substr(next_newl + 1);
+            } else {
+                // otherwise we should be emptying contents
+                curr_content = "";
+            }
         }
 
-        Page initial_page = {std::move(lines), offset, width, height,
-                             wrap_lines};
+        Page initial_page = {
+            std::move(lines), offset,    non_wrapping_chunk_idx, width,
+            height,           wrap_lines};
 
         while (initial_page.get_num_lines() < height &&
                initial_page.has_prev()) {
@@ -139,6 +158,65 @@ struct Page {
 
     size_t get_num_lines() const {
         return m_lines.size();
+    }
+
+    // this isnt good because they might scroll up/down
+    // we dont need an extra member
+    // at the cost of running through the page again
+    // so in the interest of fast scrolling
+    // we'll just store it damnit
+    void scroll_right(std::string_view contents) {
+        // guaranteed that at least one line has right
+        for (size_t idx = 0; idx < m_lines.size(); ++idx) {
+            bool is_end = (m_lines[idx].end == contents.size()) ||
+                          (contents[m_lines[idx].end] == '\n');
+            bool can_shift = (m_lines[idx].length() == m_width);
+
+            // just caps them on their lines
+            m_lines[idx].start = m_lines[idx].end;
+
+            if (!can_shift) {
+                continue;
+            }
+
+            // now we know that m_lines[idx].end != '\n'
+            m_lines[idx].start = m_lines[idx].end;
+
+            std::string_view curr_line =
+                from_page_line(contents.data(), m_lines[idx]);
+            size_t next_newl = curr_line.find('\n');
+
+            if (next_newl == std::string::npos) {
+                next_newl = curr_line.size();
+            }
+
+            next_newl = std::min(m_width, next_newl);
+            m_lines[idx].end;
+        }
+    }
+
+    bool has_right(std::string_view contents) const {
+        // need to check whether any of the lines is
+        // newl-free for the entire parts
+        bool has_content = false;
+        for (size_t idx = 0; idx < m_lines.size(); ++idx) {
+            // so a line has content if:
+            // the length is width && the char at width is not EOF nor
+            // newline
+
+            bool is_end = (m_lines[idx].end == contents.size()) ||
+                          (contents[m_lines[idx].end] == '\n');
+
+            has_content |= !is_end && (m_lines[idx].length() == m_width);
+        }
+
+        return has_content;
+    }
+
+    void scroll_left(std::string_view contents) {
+    }
+
+    bool has_left(std::string_view contents) const {
     }
 
     void scroll_down(std::string_view contents) {

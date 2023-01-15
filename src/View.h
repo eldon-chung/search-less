@@ -119,8 +119,23 @@ struct View {
         return m_page;
     }
 
+    void scroll_right(size_t num_scrolls = 1) {
+        while (num_scrolls-- > 0 &&
+               m_page.has_right(m_content_handle->get_contents())) {
+            m_page.scroll_right(m_content_handle->get_contents());
+        }
+    }
+
+    void scroll_left(size_t num_scrolls = 1) {
+        while (num_scrolls-- > 0 &&
+               m_page.has_left(m_content_handle->get_contents())) {
+            m_page.scroll_left(m_content_handle->get_contents());
+        }
+    }
+
     void scroll_up(size_t num_scrolls = 1) {
-        while (num_scrolls-- > 0 && m_page.has_prev()) {
+        while (num_scrolls-- > 0 &&
+               m_page.has_prev(m_content_handle->get_contents())) {
             m_page.scroll_up(m_content_handle->get_contents());
         }
     }
@@ -141,20 +156,23 @@ struct View {
     }
 
     void move_to_top() {
-        move_to_byte_offset(0);
+        move_to_byte_offset(0, false);
     }
 
     void move_to_end() {
         if (m_content_handle->get_contents().empty()) {
             return;
         }
-        move_to_byte_offset(m_content_handle->get_contents().length() - 1);
+        // in the case of eof we don't scroll to the right because we
+        // expect to see the last line
+        move_to_byte_offset(m_content_handle->get_contents().length() - 1,
+                            false);
     }
 
-    void move_to_byte_offset(size_t offset) {
+    void move_to_byte_offset(size_t offset, bool auto_chunk_index = true) {
         m_page = Page::get_page_at_byte_offset(
             m_content_handle->get_contents(), offset, m_main_window_height,
-            m_main_window_width, m_wrap_lines);
+            m_main_window_width, m_wrap_lines, auto_chunk_index);
     }
 
     size_t get_starting_offset() const {
