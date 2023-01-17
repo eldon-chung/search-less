@@ -120,22 +120,19 @@ struct View {
     }
 
     void scroll_right(size_t num_scrolls = 1) {
-        while (num_scrolls-- > 0 &&
-               m_page.has_right(m_content_handle->get_contents())) {
-            m_page.scroll_right(m_content_handle->get_contents());
+        while (num_scrolls-- > 0 && m_page.has_right()) {
+            m_page.scroll_right();
         }
     }
 
     void scroll_left(size_t num_scrolls = 1) {
-        while (num_scrolls-- > 0 &&
-               m_page.has_left(m_content_handle->get_contents())) {
-            m_page.scroll_left(m_content_handle->get_contents());
+        while (num_scrolls-- > 0 && m_page.has_left()) {
+            m_page.scroll_left();
         }
     }
 
     void scroll_up(size_t num_scrolls = 1) {
-        while (num_scrolls-- > 0 &&
-               m_page.has_prev(m_content_handle->get_contents())) {
+        while (num_scrolls-- > 0 && m_page.has_prev()) {
             m_page.scroll_up(m_content_handle->get_contents());
         }
     }

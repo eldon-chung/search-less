@@ -1,9 +1,12 @@
 #pragma once
 
+#include <stddef.h>
+
+#include <assert.h>
+
 #include <deque>
 #include <iterator>
 #include <optional>
-#include <stddef.h>
 #include <string_view>
 #include <vector>
 
@@ -16,14 +19,62 @@ other calls you might make to it.
 */
 struct Page {
 
+    /**
+     * A PageLine is basically a string view,
+     * but it stores the offsets relative to the base address
+     * of the contents string view.
+     * It also stores two additional offsets that
+     * tell you where the true line begins and ends
+     * (the true ending either points at a newline, or at EOF)
+     */
     struct PageLine {
-        // stores the offsets relative
-        // to a base ptr
-        size_t start;
-        size_t end;
+        size_t m_line_start;
+        size_t m_line_end;
+
+        // never mutate these
+        size_t m_view_start;
+        size_t m_view_end;
+
+        static PageLine get_rounded_page_line(std::string_view containing_line,
+                                              const char *base_addr,
+                                              size_t width, size_t offset) {
+            size_t line_start = (size_t)(containing_line.data() - base_addr);
+            size_t line_end = line_start + containing_line.size();
+
+            size_t chunk_idx = (offset - line_start) / width;
+            size_t view_start =
+                std::min(line_end, line_start + width * chunk_idx);
+            size_t view_end = std::min(line_end, view_start + width);
+
+            return {line_start, line_end, view_start, view_end};
+        }
 
         size_t length() const {
-            return start - end;
+            return m_view_end - m_view_start;
+        }
+
+        size_t start() const {
+            return m_view_start;
+        }
+
+        size_t end() const {
+            return m_view_end;
+        }
+
+        bool has_right() const {
+            return m_view_end != m_line_end;
+        }
+
+        bool has_left() const {
+            return m_view_start != m_line_start;
+        }
+
+        bool empty() const {
+            return m_view_start == m_view_end;
+        }
+
+        bool full_length() const {
+            return m_line_end - m_line_start;
         }
     };
 
@@ -38,39 +89,78 @@ struct Page {
     bool m_wrap_lines;
 
   private:
-    static PageLine from_string_view(const char *base_addr,
-                                     std::string_view sv) {
-        return {(size_t)(sv.data() - base_addr),
-                (size_t)(sv.data() - base_addr) + sv.size()};
-    };
+    // keeping some of the PageLine related algorithms
+    // outside of the PageLine struct because I really just
+    // want it as a slightly nicer string view that we should operate on
+    // which has no notion of scrolling or moving
+
+    PageLine move_right(PageLine page_line) {
+        page_line.m_view_start = page_line.m_view_end;
+        page_line.m_view_end =
+            std::min(page_line.m_line_end, page_line.m_view_start + m_width);
+
+        return page_line;
+    }
+
+    PageLine move_left(PageLine page_line) {
+        page_line.m_view_end = page_line.m_view_start;
+
+        if (page_line.m_line_start + m_width < page_line.m_view_start) {
+            page_line.m_view_start -= m_width;
+        } else {
+            page_line.m_view_start = page_line.m_line_start;
+        }
+
+        return page_line;
+    }
+
+    size_t get_chunk_idx(PageLine const &page_line, size_t width) {
+        // we add one to the chunk idx if we can move left
+        // but we're pointing at the end right now
+        return page_line.length() / width +
+               (page_line.empty() && page_line.has_left());
+    }
 
     static std::string_view from_page_line(const char *base_addr,
                                            PageLine page_line) {
-        return {base_addr + page_line.start, base_addr + page_line.end};
+        return {base_addr + page_line.start(), base_addr + page_line.end()};
     };
 
-    static size_t round_to_width_offset(std::string_view contents,
-                                        size_t offset, size_t width) {
-        if (offset == 0) {
-            return 0;
-        }
-
-        if (offset >= contents.size()) {
+    static std::string_view get_sv_containing_offset(std::string_view contents,
+                                                     size_t offset) {
+        // we're going to explicitly allow for the case that offset ==
+        // contents.size()
+        if (offset > contents.size()) {
             throw std::out_of_range("Page: attempting to index into something"
                                     "out of content size.\n");
         }
 
-        // if the previous character is a newl, we stay
-        if (contents[offset - 1] == '\n') {
-            return offset;
+        const char *base_addr = contents.data();
+
+        if (offset == 0) {
+            size_t next_newl = contents.find('\n');
+            if (next_newl == std::string::npos) {
+                next_newl = contents.size();
+            }
+            return contents.substr(0, next_newl);
         }
 
-        std::string_view prior_contents = contents.substr(0, offset);
-        size_t last_newl = prior_contents.find_last_of("\n");
-        size_t last_line_offset =
-            (last_newl == std::string::npos) ? 0 : last_newl + 1;
+        // find the newline before us
+        size_t starting_pos = contents.rfind('\n', offset - 1);
+        if (starting_pos == std::string::npos) {
+            starting_pos = 0;
+        } else {
+            ++starting_pos;
+        }
 
-        return (offset - last_line_offset) / width * width + last_line_offset;
+        contents = contents.substr(starting_pos);
+
+        size_t newl_pos = contents.find('\n');
+        if (newl_pos == std::string::npos) {
+            newl_pos = contents.size();
+        }
+
+        return contents.substr(0, newl_pos);
     }
 
   public:
@@ -78,66 +168,34 @@ struct Page {
                                         size_t offset, size_t height,
                                         size_t width, bool wrap_lines = true,
                                         bool auto_scroll_right = true) {
-        auto break_into_wrapped_lines =
-            [](const char *base_addr, size_t width,
-               std::string_view content) -> std::deque<PageLine> {
-            std::deque<PageLine> to_return;
-            while (true) {
-                to_return.push_back(
-                    from_string_view(base_addr, content.substr(0, width)));
-                if (content.size() < width) {
-                    break;
-                }
-                content = content.substr(width);
-            }
-
-            return to_return;
-        };
-
-        offset = round_to_width_offset(contents, offset, width);
-
-        // precompute this for the non wrapping cases
-        // only do this if auto_scroll_right is true
-        size_t non_wrapping_chunk_idx =
-            (auto_scroll_right) ? offset / width : 0;
 
         const char *base_addr = contents.data();
-        std::string_view curr_content = contents.substr(offset);
-        std::deque<PageLine> lines;
-        while (!curr_content.empty() && lines.size() < height) {
-            size_t next_newl = curr_content.find_first_of("\n");
-            if (next_newl == std::string::npos) {
-                // if we can't find it take it to the end
-                // note: why did I write next_newl - 1 before this?
-                next_newl = curr_content.size();
-            }
-            if (wrap_lines) {
-                // break the current line into multiple string views
-                // and push_back all over them into into the lines collection
-                auto broken_lines = break_into_wrapped_lines(
-                    base_addr, width, curr_content.substr(0, next_newl));
-                std::move(broken_lines.begin(), broken_lines.end(),
-                          std::back_inserter(lines));
-            } else {
-                // just push the at most width chars into the substr
-                // but start at the correct offset
-                lines.push_back(from_string_view(
-                    base_addr,
-                    curr_content.substr(width * non_wrapping_chunk_idx,
-                                        std::min(next_newl - 1, width))));
-            }
-            if (next_newl < curr_content.size()) {
-                // skip over the newl
-                curr_content = curr_content.substr(next_newl + 1);
-            } else {
-                // otherwise we should be emptying contents
-                curr_content = "";
-            }
+
+        // get the string view containing our offset
+        std::string_view containing_line =
+            get_sv_containing_offset(contents, offset);
+
+        size_t chunk_idx = 0;
+        if (!wrap_lines && auto_scroll_right) {
+            chunk_idx =
+                (offset - (size_t)(containing_line.data() - base_addr)) / width;
         }
 
-        Page initial_page = {
-            std::move(lines), offset,    non_wrapping_chunk_idx, width,
-            height,           wrap_lines};
+        // compute rounded offset and chunk_idx ourselves
+        PageLine initial_line = PageLine::get_rounded_page_line(
+            containing_line, base_addr, width, offset);
+
+        Page initial_page = {{initial_line}, initial_line.start(),
+                             chunk_idx,      width,
+                             height,         wrap_lines};
+
+        fprintf(stderr, "get_page_at_byte_offset: initial_line.end() [%zu]\n",
+                initial_line.end());
+        // now scroll down and up to fill out the remaining lines
+        while (initial_page.get_num_lines() < height &&
+               initial_page.has_next(contents)) {
+            initial_page.scroll_down(contents);
+        }
 
         while (initial_page.get_num_lines() < height &&
                initial_page.has_prev()) {
@@ -153,187 +211,174 @@ struct Page {
     }
 
     size_t get_nth_offset(size_t index) const {
-        return m_lines[index].start;
+        return m_lines[index].start();
     }
 
     size_t get_num_lines() const {
         return m_lines.size();
     }
 
-    // this isnt good because they might scroll up/down
-    // we dont need an extra member
-    // at the cost of running through the page again
-    // so in the interest of fast scrolling
-    // we'll just store it damnit
-    void scroll_right(std::string_view contents) {
-        // guaranteed that at least one line has right
-        for (size_t idx = 0; idx < m_lines.size(); ++idx) {
-            bool is_end = (m_lines[idx].end == contents.size()) ||
-                          (contents[m_lines[idx].end] == '\n');
-            bool can_shift = (m_lines[idx].length() == m_width);
+    void scroll_right() {
+        // based on the way it's written right now there's no real need to
+        // invoke has_right because it would just iterate on the list anyway
 
-            // just caps them on their lines
-            m_lines[idx].start = m_lines[idx].end;
-
-            if (!can_shift) {
-                continue;
+        // should we do some rounding
+        // in case we move between lines
+        for (auto &line : m_lines) {
+            if (line.has_right()) {
+                line = move_right(line);
             }
-
-            // now we know that m_lines[idx].end != '\n'
-            m_lines[idx].start = m_lines[idx].end;
-
-            std::string_view curr_line =
-                from_page_line(contents.data(), m_lines[idx]);
-            size_t next_newl = curr_line.find('\n');
-
-            if (next_newl == std::string::npos) {
-                next_newl = curr_line.size();
-            }
-
-            next_newl = std::min(m_width, next_newl);
-            m_lines[idx].end;
-        }
-    }
-
-    bool has_right(std::string_view contents) const {
-        // need to check whether any of the lines is
-        // newl-free for the entire parts
-        bool has_content = false;
-        for (size_t idx = 0; idx < m_lines.size(); ++idx) {
-            // so a line has content if:
-            // the length is width && the char at width is not EOF nor
-            // newline
-
-            bool is_end = (m_lines[idx].end == contents.size()) ||
-                          (contents[m_lines[idx].end] == '\n');
-
-            has_content |= !is_end && (m_lines[idx].length() == m_width);
         }
 
-        return has_content;
+        update_chunk_idx();
     }
 
-    void scroll_left(std::string_view contents) {
+    bool has_right() const {
+        // might as well update chunk since we're
+        // iterating on it anyway
+        size_t new_chunk_idx = 0;
+        bool has_right = false;
+        for (auto const &line : m_lines) {
+            has_right |= line.has_right();
+        }
+
+        return has_right;
     }
 
-    bool has_left(std::string_view contents) const {
+    void scroll_left() {
+        // based on the way it's written right now there's no real need to
+        // invoke has_right because it would just iterate on the list anyway
+
+        // precondition: m_chunk_idx is updated
+        for (auto &line : m_lines) {
+            // assert the precondition
+            assert(get_chunk_idx(line, m_width) <= m_chunk_idx);
+            if (line.has_left()) {
+                line = move_left(line);
+            }
+        }
+
+        update_chunk_idx();
+    }
+
+    bool has_left() const {
+        bool has_left = false;
+        for (auto const &line : m_lines) {
+            has_left |= line.has_left();
+        }
+        return has_left;
+    }
+
+    /**
+     * Helps to bound the chunk idx when scrolling between lines
+     */
+    void update_chunk_idx() {
+        size_t new_chunk_idx = 0;
+        for (auto const &line : m_lines) {
+            new_chunk_idx =
+                std::max(new_chunk_idx, get_chunk_idx(line, m_width));
+        }
+        m_chunk_idx = new_chunk_idx;
     }
 
     void scroll_down(std::string_view contents) {
+        // if our ending line is already at EOF
         if (!has_next(contents)) {
             return;
         }
 
-        // depending on whether we wrap we search different substrings for \n
-        size_t substr_len = (m_wrap_lines) ? m_width : std::string::npos;
-
-        // get the offset based on the last line
-        // add 1 to skip over the potential newl
-        size_t next_starting_pos = get_end_offset() + 1;
-
-        std::string_view remaining_contents =
-            contents.substr(next_starting_pos, substr_len);
-
-        size_t newl_pos = remaining_contents.find_first_of("\n");
-        if (newl_pos != std::string::npos) {
-            remaining_contents = remaining_contents.substr(0, newl_pos);
+        if (m_wrap_lines && m_lines.back().has_right()) {
+            if (m_lines.size() == m_height) {
+                m_lines.pop_front();
+            }
+            m_lines.push_back(move_right(m_lines.back()));
+            update_chunk_idx();
+            return;
         }
 
-        m_lines.pop_front();
-        m_lines.push_back(
-            from_string_view(contents.data(), remaining_contents));
+        const char *base_addr = contents.data();
 
-        m_global_offset = m_lines.front().start;
+        // skip over one (we're guaranteed that we're skipping over a newline)
+        size_t next_starting_pos = get_end_offset() + 1;
+        std::string_view containing_line =
+            get_sv_containing_offset(contents, next_starting_pos);
+
+        size_t relative_offset;
+        if (m_wrap_lines) {
+            relative_offset = 0;
+        } else {
+            relative_offset =
+                std::min(containing_line.length() / m_width * m_width,
+                         m_chunk_idx * m_width);
+        }
+
+        PageLine next_line = PageLine::get_rounded_page_line(
+            containing_line, base_addr, m_width,
+            next_starting_pos + relative_offset);
+
+        if (m_lines.size() == m_height) {
+            m_lines.pop_front();
+        }
+        m_lines.push_back(next_line);
+        update_chunk_idx();
     }
 
     void scroll_up(std::string_view contents) {
         if (!has_prev()) {
             return;
         }
-        // we need to maintain the invariant that if we're not
-        // at the start of some line, it's the case that we're already wrapped
-        // so the only time we need to aggressively search backwards is
-        // when we're leaving a line
 
-        if (!m_wrap_lines) {
-
-            // without line wrapping the prior char is newl
-            std::string_view prior_contents =
-                contents.substr(0, m_global_offset - 1);
-
-            // search backwards for the next '\n'
-            size_t last_idx = prior_contents.find_last_of("\n");
-            if (last_idx != std::string::npos) {
-                prior_contents = prior_contents.substr(last_idx + 1);
-            }
-            // assert(m_lines.size() <= m_height);
-            if (m_lines.size() == m_height) {
-                m_lines.pop_front();
-            }
-            m_lines.push_back(
-                from_string_view(contents.data(), prior_contents));
-            // do we need to make sure prior contents.data() is correct
-            // to update global offset properly
-            m_global_offset = m_lines.front().start;
-            return;
-        }
-
-        // in the line wrap case
-        std::string_view prior_contents = contents.substr(0, m_global_offset);
-
-        if (prior_contents.back() != '\n') {
-            std::string_view prior_line =
-                contents.substr(m_global_offset - m_width, m_width);
-
+        if (m_wrap_lines && m_lines.front().has_left()) {
+            PageLine prev_line = move_left(m_lines.front());
             if (m_lines.size() == m_height) {
                 m_lines.pop_back();
             }
-            m_lines.push_front(from_string_view(contents.data(), prior_line));
-            m_global_offset -= m_width;
-        } else {
-            prior_contents.remove_suffix(1);
-            size_t newl_idx = prior_contents.find_last_of("\n");
-            if (newl_idx != std::string::npos) {
-                prior_contents = prior_contents.substr(newl_idx + 1);
-            }
-
-            // special case I guess
-            if (prior_contents.empty()) {
-                // assert(m_lines.size() <= m_height);
-                if (m_lines.size() == m_height) {
-                    m_lines.pop_back();
-                }
-                m_lines.push_front(
-                    from_string_view(contents.data(), prior_contents));
-                m_global_offset -= 1;
-            } else {
-                size_t rounded_wrapped_line =
-                    ((prior_contents.size() - 1) / m_width) * m_width;
-                prior_contents =
-                    prior_contents.substr(rounded_wrapped_line, m_width);
-
-                // assert(m_lines.size() <= m_height);
-                if (m_lines.size() == m_height) {
-                    m_lines.pop_back();
-                }
-                m_lines.push_front(
-                    from_string_view(contents.data(), prior_contents));
-                m_global_offset = m_lines.front().start;
-            }
+            m_lines.push_front(prev_line);
+            update_chunk_idx();
+            return;
         }
+
+        const char *base_addr = contents.data();
+
+        // else we're going to be starting on a new line
+        assert(contents.back() == '\n');
+        assert(get_begin_offset() >= 1);
+
+        // skip over one
+        size_t prev_starting_pos = get_begin_offset() - 1;
+        std::string_view containing_line =
+            get_sv_containing_offset(contents, prev_starting_pos);
+
+        // update prev_starting_pos to point at the start of the line
+        prev_starting_pos = (size_t)(containing_line.data() - base_addr);
+
+        assert(!m_wrap_lines || (m_chunk_idx == 0));
+        size_t relative_offset =
+            std::min(containing_line.length() / m_width * m_width,
+                     m_chunk_idx * m_width);
+
+        PageLine prev_line = PageLine::get_rounded_page_line(
+            containing_line, base_addr, m_width,
+            prev_starting_pos + relative_offset);
+
+        if (m_lines.size() == m_height) {
+            m_lines.pop_back();
+        }
+        m_lines.push_front(prev_line);
+        update_chunk_idx();
     }
 
     // special case: always valid regardless
     size_t get_begin_offset() const {
-        return m_global_offset;
+        return m_lines.front().start();
     }
 
     size_t get_end_offset() const {
-        return m_lines.back().end;
+        return m_lines.back().end();
     }
 
     bool has_prev() const {
-        return m_global_offset != 0;
+        return get_begin_offset() != 0;
     }
 
     bool has_next(std::string_view contents) const {
@@ -342,7 +387,7 @@ struct Page {
         }
         // see if there are any more bytes that are
         // beyond our current line
-        return m_lines.back().end + 1 < contents.size();
+        return m_lines.back().end() < contents.size();
     }
 
     auto cbegin() const {
