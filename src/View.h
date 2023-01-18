@@ -119,14 +119,27 @@ struct View {
         return m_page;
     }
 
+    void toggle_wrap_lines() {
+        m_wrap_lines = !m_wrap_lines;
+        // rebuild the page here
+        size_t begin_offset = m_page.get_begin_offset();
+        move_to_byte_offset(begin_offset, false);
+    }
+
     void scroll_right(size_t num_scrolls = 1) {
-        while (num_scrolls-- > 0 && m_page.has_right()) {
+        if (m_wrap_lines) {
+            return;
+        }
+        while (num_scrolls-- > 0) {
             m_page.scroll_right();
         }
     }
 
     void scroll_left(size_t num_scrolls = 1) {
-        while (num_scrolls-- > 0 && m_page.has_left()) {
+        if (m_wrap_lines) {
+            return;
+        }
+        while (num_scrolls-- > 0) {
             m_page.scroll_left();
         }
     }
@@ -201,7 +214,8 @@ struct View {
         }
     };
 
-    void display_page_at(std::vector<std::vector<Highlight>> highlight_list) {
+    void
+    display_page_at(std::vector<std::vector<Highlight>> const &highlight_list) {
 
         std::scoped_lock lock(*m_nc_mutex);
 

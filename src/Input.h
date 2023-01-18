@@ -115,6 +115,14 @@ struct InputThread {
                 chan->push({Command::QUIT});
                 // return; // Kill input thread
                 return;
+            case KEY_LEFT:
+                chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
+                chan->push({Command::VIEW_LEFT, "", {}, num_payload});
+                break;
+            case KEY_RIGHT:
+                chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
+                chan->push({Command::VIEW_RIGHT, "", {}, num_payload});
+                break;
             case 'j':
             case KEY_DOWN:
                 chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
@@ -229,6 +237,10 @@ struct InputThread {
                 // Set option
                 int opt = poll_and_getch();
                 switch (opt) {
+                case 'S':
+                    chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
+                    chan->push({Command::TOGGLE_LONG_LINES, ":", {}, 1});
+                    break;
                 case 'I':
                     chan->push({Command::DISPLAY_COMMAND, ":", {}, 1});
                     chan->push({Command::TOGGLE_CASELESS, "-I"});

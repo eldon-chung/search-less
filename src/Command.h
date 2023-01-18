@@ -10,6 +10,8 @@ struct Command {
         QUIT,
         VIEW_DOWN,
         VIEW_UP,
+        VIEW_LEFT,
+        VIEW_RIGHT,
         VIEW_DOWN_HALF_PAGE,
         VIEW_UP_HALF_PAGE,
         VIEW_DOWN_PAGE,
@@ -33,6 +35,7 @@ struct Command {
         TOGGLE_HIGHLIGHTING,
         INTERRUPT,
         FOLLOW_EOF,
+        TOGGLE_LONG_LINES,
     };
     Type type;
     std::string payload_str;

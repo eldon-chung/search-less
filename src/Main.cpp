@@ -41,7 +41,6 @@ void Main::update_screen_highlight_offsets() {
         auto line_offsets = basic_search_all(
             page_line, m_search_result.pattern(), 0, page_line.size(),
             m_search_case != Search::Case::INSENSITIVE);
-
         line_highlights.clear();
         line_highlights.reserve(line_offsets.size());
 
@@ -119,6 +118,14 @@ bool Main::run_main() {
         m_task_chan.close();
         m_file_task_stop_source.request_stop();
         return true;
+    case Command::VIEW_LEFT:
+        m_view.scroll_left(std::max(command.payload_num, (size_t)1));
+        display_page();
+        break;
+    case Command::VIEW_RIGHT:
+        m_view.scroll_right(std::max(command.payload_num, (size_t)1));
+        display_page();
+        break;
     case Command::VIEW_DOWN:
         m_view.scroll_down(std::max(command.payload_num, (size_t)1));
         display_page();
@@ -172,6 +179,11 @@ bool Main::run_main() {
         break;
     case Command::DISPLAY_COMMAND: {
         set_command(command.payload_str, command.payload_num);
+        break;
+    }
+    case Command::TOGGLE_LONG_LINES: {
+        m_view.toggle_wrap_lines();
+        display_page();
         break;
     }
     case Command::DISPLAY_STATUS: {

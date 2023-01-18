@@ -61,6 +61,14 @@ struct Page {
             return m_view_end;
         }
 
+        size_t true_start() const {
+            return m_line_start;
+        }
+
+        size_t true_end() const {
+            return m_line_end;
+        }
+
         bool has_right() const {
             return m_view_end != m_line_end;
         }
@@ -93,6 +101,13 @@ struct Page {
     // outside of the PageLine struct because I really just
     // want it as a slightly nicer string view that we should operate on
     // which has no notion of scrolling or moving
+
+    void move_to_ith_chunk(PageLine &page_line, size_t idx) {
+        page_line.m_view_start = std::min(
+            m_width * idx + page_line.m_line_start, page_line.m_line_end);
+        page_line.m_view_end = std::min(
+            m_width * (idx + 1) + page_line.m_line_start, page_line.m_line_end);
+    }
 
     PageLine move_right(PageLine page_line) {
         page_line.m_view_start = page_line.m_view_end;
@@ -134,8 +149,6 @@ struct Page {
             throw std::out_of_range("Page: attempting to index into something"
                                     "out of content size.\n");
         }
-
-        const char *base_addr = contents.data();
 
         if (offset == 0) {
             size_t next_newl = contents.find('\n');
@@ -217,24 +230,18 @@ struct Page {
     }
 
     void scroll_right() {
-        // based on the way it's written right now there's no real need to
-        // invoke has_right because it would just iterate on the list anyway
 
         // should we do some rounding
         // in case we move between lines
+        ++m_chunk_idx;
         for (auto &line : m_lines) {
-            if (line.has_right()) {
-                line = move_right(line);
-            }
+            // if (line.start() != line.true_end()) {
+            move_to_ith_chunk(line, m_chunk_idx);
+            // }
         }
-
-        update_chunk_idx();
     }
 
     bool has_right() const {
-        // might as well update chunk since we're
-        // iterating on it anyway
-        size_t new_chunk_idx = 0;
         bool has_right = false;
         for (auto const &line : m_lines) {
             has_right |= line.has_right();
@@ -246,17 +253,20 @@ struct Page {
     void scroll_left() {
         // based on the way it's written right now there's no real need to
         // invoke has_right because it would just iterate on the list anyway
+        if (m_chunk_idx == 0) {
+            return;
+        }
 
+        --m_chunk_idx;
         // precondition: m_chunk_idx is updated
         for (auto &line : m_lines) {
             // assert the precondition
-            assert(get_chunk_idx(line, m_width) <= m_chunk_idx);
-            if (line.has_left()) {
-                line = move_left(line);
-            }
-        }
+            // if (line.start() != line.true_start()) {
+            // line = move_left(line);
+            move_to_ith_chunk(line, m_chunk_idx);
 
-        update_chunk_idx();
+            // }
+        }
     }
 
     bool has_left() const {
@@ -267,21 +277,9 @@ struct Page {
         return has_left;
     }
 
-    /**
-     * Helps to bound the chunk idx when scrolling between lines
-     */
-    void update_chunk_idx() {
-        size_t new_chunk_idx = 0;
-        for (auto const &line : m_lines) {
-            new_chunk_idx =
-                std::max(new_chunk_idx, get_chunk_idx(line, m_width));
-        }
-        m_chunk_idx = new_chunk_idx;
-    }
-
     void scroll_down(std::string_view contents) {
         // if our ending line is already at EOF
-        if (!has_next(contents)) {
+        if (m_wrap_lines && !has_next(contents)) {
             return;
         }
 
@@ -290,14 +288,17 @@ struct Page {
                 m_lines.pop_front();
             }
             m_lines.push_back(move_right(m_lines.back()));
-            update_chunk_idx();
+            // update_chunk_idx();
             return;
         }
 
         const char *base_addr = contents.data();
 
         // skip over one (we're guaranteed that we're skipping over a newline)
-        size_t next_starting_pos = get_end_offset() + 1;
+        size_t next_starting_pos =
+            (m_wrap_lines) ? get_end_offset() : m_lines.back().true_end();
+        ++next_starting_pos;
+
         std::string_view containing_line =
             get_sv_containing_offset(contents, next_starting_pos);
 
@@ -305,24 +306,30 @@ struct Page {
         if (m_wrap_lines) {
             relative_offset = 0;
         } else {
+            // make sure we don't run off the thing
             relative_offset =
-                std::min(containing_line.length() / m_width * m_width,
-                         m_chunk_idx * m_width);
+                std::min(containing_line.length(), m_chunk_idx * m_width);
         }
 
         PageLine next_line = PageLine::get_rounded_page_line(
             containing_line, base_addr, m_width,
             next_starting_pos + relative_offset);
 
+        move_to_ith_chunk(next_line, m_chunk_idx);
+
         if (m_lines.size() == m_height) {
             m_lines.pop_front();
         }
         m_lines.push_back(next_line);
-        update_chunk_idx();
+        // update_chunk_idx();
     }
 
     void scroll_up(std::string_view contents) {
-        if (!has_prev()) {
+        if (m_wrap_lines && m_lines.front().start() == 0) {
+            return;
+        }
+
+        if (!m_wrap_lines && m_lines.front().true_start() == 0) {
             return;
         }
 
@@ -332,7 +339,6 @@ struct Page {
                 m_lines.pop_back();
             }
             m_lines.push_front(prev_line);
-            update_chunk_idx();
             return;
         }
 
@@ -343,27 +349,27 @@ struct Page {
         assert(get_begin_offset() >= 1);
 
         // skip over one
-        size_t prev_starting_pos = get_begin_offset() - 1;
+        size_t prev_starting_pos =
+            (m_wrap_lines) ? get_begin_offset() : m_lines.front().true_start();
+        --prev_starting_pos;
         std::string_view containing_line =
             get_sv_containing_offset(contents, prev_starting_pos);
 
         // update prev_starting_pos to point at the start of the line
         prev_starting_pos = (size_t)(containing_line.data() - base_addr);
-
         assert(!m_wrap_lines || (m_chunk_idx == 0));
         size_t relative_offset =
-            std::min(containing_line.length() / m_width * m_width,
-                     m_chunk_idx * m_width);
+            std::min(containing_line.length(), m_chunk_idx * m_width);
 
         PageLine prev_line = PageLine::get_rounded_page_line(
             containing_line, base_addr, m_width,
             prev_starting_pos + relative_offset);
+        move_to_ith_chunk(prev_line, m_chunk_idx);
 
         if (m_lines.size() == m_height) {
             m_lines.pop_back();
         }
         m_lines.push_front(prev_line);
-        update_chunk_idx();
     }
 
     // special case: always valid regardless
