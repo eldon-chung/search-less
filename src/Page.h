@@ -189,8 +189,6 @@ struct Page {
                              chunk_idx,      width,
                              height,         wrap_lines};
 
-        fprintf(stderr, "get_page_at_byte_offset: initial_line.end() [%zu]\n",
-                initial_line.end());
         // now scroll down and up to fill out the remaining lines
         while (initial_page.get_num_lines() < height &&
                initial_page.has_next(contents)) {
@@ -387,7 +385,7 @@ struct Page {
         }
         // see if there are any more bytes that are
         // beyond our current line
-        return m_lines.back().end() < contents.size();
+        return m_lines.back().end() + 1 < contents.size();
     }
 
     auto cbegin() const {
