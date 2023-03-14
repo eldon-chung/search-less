@@ -17,6 +17,7 @@
 // "scoped globals" in this way. perhaps we should make
 // this a static method that takes in params
 void Main::update_screen_highlight_offsets() {
+    // TODO: change this for regex
 
     if (!m_search_result.has_pattern()) {
         return;
@@ -40,7 +41,7 @@ void Main::update_screen_highlight_offsets() {
         // this is already relative to our visual line
         auto line_offsets = basic_search_all(
             page_line, m_search_result.pattern(), 0, page_line.size(),
-            m_search_case != Search::Case::INSENSITIVE);
+            m_search_case != RegularSearch::Case::INSENSITIVE);
         line_highlights.clear();
         line_highlights.reserve(line_offsets.size());
 
@@ -82,7 +83,7 @@ void Main::display_command_or_status() {
 
 bool Main::run_main() {
 
-    if (m_chan.empty() && (m_search_state.has_value() || m_following_eof)) {
+    if (m_chan.empty() && (m_search_state || m_following_eof)) {
         // if there isn't a command and there is an ongoing search
         // we can just continue the search
         return false;
@@ -192,24 +193,24 @@ bool Main::run_main() {
     }
     case Command::TOGGLE_CASELESS: {
         set_command("", 0);
-        if (m_search_case == Search::Case::INSENSITIVE) {
-            m_search_case = Search::Case::SENSITIVE;
+        if (m_search_case == RegularSearch::Case::INSENSITIVE) {
+            m_search_case = RegularSearch::Case::SENSITIVE;
             m_view.display_status(command.payload_str +
                                   ": Caseless search disabled");
         } else {
-            m_search_case = Search::Case::INSENSITIVE;
+            m_search_case = RegularSearch::Case::INSENSITIVE;
             m_view.display_status(command.payload_str +
                                   ": Caseless search enabled");
         }
         break;
     }
     case Command::TOGGLE_CONDITIONALLY_CASELESS: {
-        if (m_search_case == Search::Case::CONDITIONALLY_SENSITIVE) {
-            m_search_case = Search::Case::SENSITIVE;
+        if (m_search_case == RegularSearch::Case::CONDITIONALLY_SENSITIVE) {
+            m_search_case = RegularSearch::Case::SENSITIVE;
             m_view.display_status(command.payload_str +
                                   ": Caseless search disabled");
         } else {
-            m_search_case = Search::Case::CONDITIONALLY_SENSITIVE;
+            m_search_case = RegularSearch::Case::CONDITIONALLY_SENSITIVE;
             m_view.display_status(
                 command.payload_str +
                 ": Conditionally caseless search enabled (case is "
@@ -272,9 +273,9 @@ bool Main::run_main() {
             end = std::max(end, m_search_result.offset());
         }
 
-        m_search_state =
-            Search(std::move(search_pattern), Search::Mode::PREV, end,
-                   m_search_case, std::max((size_t)1, command.payload_num));
+        m_search_state = std::make_unique<RegularSearch>(
+            std::move(search_pattern), RegularSearch::Mode::PREV, end,
+            m_search_case, std::max((size_t)1, command.payload_num));
 
         m_search_state->schedule();
         break;
@@ -302,9 +303,9 @@ bool Main::run_main() {
             start = m_search_result.offset() + m_search_result.pattern().size();
         }
 
-        m_search_state =
-            Search(std::move(search_pattern), Search::Mode::NEXT, start,
-                   m_search_case, std::max((size_t)1, command.payload_num));
+        m_search_state = std::make_unique<RegularSearch>(
+            std::move(search_pattern), RegularSearch::Mode::NEXT, start,
+            m_search_case, std::max((size_t)1, command.payload_num));
 
         m_search_state->schedule();
         break;
@@ -318,9 +319,9 @@ bool Main::run_main() {
         std::string search_pattern = command.payload_str;
         size_t start = m_view.get_starting_offset();
 
-        m_search_state =
-            Search(std::move(search_pattern), Search::Mode::NEXT, start,
-                   m_search_case, std::max((size_t)1, command.payload_num));
+        m_search_state = std::make_unique<RegularSearch>(
+            std::move(search_pattern), RegularSearch::Mode::NEXT, start,
+            m_search_case, std::max((size_t)1, command.payload_num));
 
         m_search_result.clear();
         m_search_state->schedule();
@@ -464,17 +465,24 @@ void Main::run_search() {
     assert(m_search_state->num_iter() >= 1);
 
     auto handle_success = [this]() {
+        // in the case we need to move the view
         if (m_search_state->found_position() >= m_view.get_ending_offset() ||
             m_search_state->found_position() < m_view.get_starting_offset()) {
             m_view.move_to_byte_offset(m_search_state->found_position());
         }
+
+        // prepare the search result
         m_search_result = {m_search_state->pattern(),
                            m_search_state->found_position()};
+
+        // clean up the search state
+        m_search_state.reset();
+
+        // turn highlighting on
         m_highlight_active = true;
+
+        // render the new page
         display_page();
-        m_search_state = std::nullopt;
-        m_search_result = {m_search_state->pattern(),
-                           m_search_state->found_position()};
         m_view.display_status("found result");
     };
 
@@ -508,7 +516,7 @@ void Main::run_search() {
         // then this is a fresh new search
         m_search_result = {m_search_state->pattern(), std::string::npos};
     }
-    m_search_state = std::nullopt;
+    m_search_state.reset();
 }
 
 void Main::run_follow_eof() {
@@ -525,7 +533,7 @@ void Main::run() {
         if (run_main()) {
             break;
         }
-        if (m_search_state.has_value()) {
+        if (m_search_state) {
             run_search();
         }
         if (m_following_eof) {

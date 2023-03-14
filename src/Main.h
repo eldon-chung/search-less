@@ -42,13 +42,13 @@ struct Main {
 
     bool m_highlight_active;
 
-    Search::Case m_search_case;
+    RegularSearch::Case m_search_case;
 
     std::string m_status_str_buffer;
     std::string m_command_str_buffer;
     size_t m_command_cursor_pos;
 
-    std::optional<Search> m_search_state;
+    std::unique_ptr<RegularSearch> m_search_state;
     std::vector<std::vector<View::Highlight>> m_highlight_offsets;
     // this is to help highlight stuff on screen so it persists beyond
     // the search state (which is only valid until the job is done)
@@ -69,7 +69,7 @@ struct Main {
           m_input(&m_nc_mutex, &m_chan, tty, std::move(history_filename),
                   history_maxsize),
           m_taskmaster(&m_task_chan), m_highlight_active(true),
-          m_search_case(Search::Case::SENSITIVE),
+          m_search_case(RegularSearch::Case::SENSITIVE),
           m_search_result({"", std::string::npos}), m_following_eof(false),
           m_time_commands(time_commands) {
         register_signal_handlers(&m_chan);

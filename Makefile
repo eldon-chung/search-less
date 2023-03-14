@@ -49,6 +49,7 @@ PRECIOUS_TARGETS += $(OBJDIR)/%.o
 # PKGCONFIG_LIBS += openssl
 PKGCONFIG_LIBS += ncurses
 PKGCONFIG_LIBS += readline
+PKGCONFIG_LIBS += libpcre
 
 # Example: adding boost_system (can't use pkg-config cause they dumb)
 # LDFLAGS += -lboost_system
