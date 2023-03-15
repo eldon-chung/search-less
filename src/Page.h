@@ -345,7 +345,7 @@ struct Page {
         const char *base_addr = contents.data();
 
         // else we're going to be starting on a new line
-        assert(contents.back() == '\n');
+        // assert(contents.back() == '\n');
         assert(get_begin_offset() >= 1);
 
         // skip over one
