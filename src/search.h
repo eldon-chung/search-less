@@ -7,8 +7,10 @@
 #include <pcre2.h>
 
 #include <algorithm>
+#include <deque>
 #include <functional>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -26,7 +28,8 @@ size_t basic_search_first(std::string_view model, std::string_view pattern,
 size_t basic_search_last(std::string_view file_contents,
                          std::string_view pattern, size_t beginning_offset,
                          size_t ending_offset, bool caseless = false);
-
+// Base class for long running search tasks that need to be scheduled
+// Do not use this if you're only trying to search within a page itself
 class SearchState {
 
   protected:
@@ -283,74 +286,115 @@ struct SearchResult {
 
 // wraps the PCRE stuff
 class RegexSearch : public SearchState {
+    // unlike regular search we'll run on entire chunk sizes
+    // and cache results because it's probably
+    // cheaper that way (for backwards searching at least)
 
     struct LineResults {
         struct Result {
             size_t start;
             size_t length;
             bool is_partial;
+            bool is_complete;
         };
-        std::vector<Result> results;
-        std::optional<size_t> result_idx;
-
+        std::deque<Result> results;
+        std::optional<std::deque<Result>::iterator> curr_result;
         // add api here to increment result_idx
 
-        bool at_last_result() const {
-            return result_idx && result_idx == results.size() - 1;
-        }
-
-        bool has_result() const {
-            assert((bool)result_idx == results.empty());
-            return results.empty();
+        bool has_it() const {
+            return curr_result.has_value();
         }
 
         bool empty() const {
-            assert((bool)result_idx == results.empty());
             return results.empty();
         }
 
         void clear() {
             results.clear();
-            result_idx = std::nullopt;
+            curr_result = std::nullopt;
         }
 
-        void push_back(size_t start, size_t end, bool is_partial = false) {
-            // if we're pushing must make sure the
-            // most recent result we're pushing it is not a partial
-            assert(!results.empty() || !results.back().is_partial);
-            results.push_back({start, end, is_partial});
+        void set_at_begin() {
+            if (results.empty()) {
+                throw std::runtime_error("can't set at begin on empty list");
+            }
+            curr_result = results.begin();
         }
 
-        void pop_back() {
-            results.pop_back();
+        void set_at_end() {
+            if (results.empty()) {
+                throw std::runtime_error("can't set at end on empty list");
+            }
+            curr_result = results.end();
+            --(*curr_result);
         }
 
-        void extend_last_result(size_t new_start, size_t new_end,
-                                bool is_partial) {
-            assert(!results.empty() && results.back().is_partial);
-            assert(new_end >= new_start);
-            results.back().length += (new_end - new_start);
-            results.back().is_partial = is_partial;
+        // might have an issue if it's only a strictly partial match
+        Result get_curr_result() {
+            return **curr_result;
         }
 
-        bool last_result_is_partial() const {
-            return !results.empty() && results.back().is_partial;
+        void move_back() {
+            if (!has_it()) {
+                throw std::runtime_error("can't set move back on an without "
+                                         "first setting an iterator");
+            }
+
+            --(*curr_result);
         }
 
-        void push_result(size_t start, size_t end, bool is_partial) {
-            if (last_result_is_partial()) {
-                extend_last_result(start, end, is_partial);
+        void move_next() {
+            if (!has_it()) {
+                throw std::runtime_error("can't set move back on an without "
+                                         "first setting an iterator");
+            }
+
+            ++(*curr_result);
+        }
+
+        bool at_first_result() const {
+            return curr_result && *curr_result == results.begin();
+        }
+
+        bool at_last_result() const {
+            return curr_result && *curr_result == (--results.end());
+        }
+
+        void push_back_result(size_t offset, size_t length,
+                              bool is_partial = false,
+                              bool is_complete = false) {
+            if (has_it()) {
+                throw std::runtime_error(
+                    "you should only be pushing back after the current "
+                    "iterator has cleared");
+            }
+
+            // if we have a match starting at the same offset, we extend it
+            if (!results.empty() && results.back().start == offset) {
+                results.back().length = length;
+                results.back().is_partial = is_partial;
+                results.back().is_complete |=
+                    is_complete; // we don't want to overwrite a previous match
             } else {
-                push_back(start, end, is_partial);
+                // else we push a new thing in
+                results.push_back({offset, length, is_partial, is_complete});
             }
         }
 
-        void inc_result_idx() {
-            if (!result_idx) {
-                result_idx = 0;
-            } else {
-                ++result_idx.value();
+      private:
+        void push_front(size_t offset, size_t length, bool is_partial,
+                        bool is_complete) {
+            results.push_front({offset, length, is_partial, is_complete});
+        }
+
+        void push_back(size_t offset, size_t length, bool is_partial,
+                       bool is_complete) {
+            if (has_it()) {
+                throw std::runtime_error(
+                    "you should only be pushing back after the current "
+                    "iterator has cleared");
             }
+            results.push_back({offset, length, is_partial, is_complete});
         }
     };
 
@@ -362,15 +406,15 @@ class RegexSearch : public SearchState {
     pcre2_code *m_compiled_pcre_code;
     pcre2_match_data *m_match_data;
     LineResults m_line_results;
-    size_t m_last_matched_position;
-    size_t m_last_matched_length;
+    std::optional<LineResults::Result> m_last_best_result;
 
   public:
     RegexSearch(std::string pattern, Mode mode, size_t offset,
                 Case sensitivity = Case::INSENSITIVE, size_t num_iter = 1)
         : SearchState(mode_to_start(mode, offset), mode_to_end(mode, offset),
                       num_iter, true, false),
-          m_pattern(std::move(pattern)), m_mode(mode) {
+          m_pattern(std::move(pattern)), m_mode(mode),
+          m_last_best_result(std::nullopt) {
 
         m_pcre_options = 0;
 
@@ -400,9 +444,9 @@ class RegexSearch : public SearchState {
         pcre2_match_data_free(m_match_data);
     }
 
-    bool needs_more(size_t content_length) const {
-        return (m_mode == Mode::NEXT) &&
-               m_line_results.last_result_is_partial();
+    // todo: should you be updating result?
+    bool needs_more(size_t __attribute__((unused)) content_length) const {
+        return (!m_last_best_result || !m_last_best_result->is_complete);
     }
 
     void yield() {
@@ -417,53 +461,6 @@ class RegexSearch : public SearchState {
         return m_starting_offset;
     }
 
-    void run(std::string_view contents) {
-        // if we can just refer to our precomputed
-        // results, we do that, else we need to search
-
-        if (!m_line_results.at_last_result()) {
-            m_line_results.inc_result_idx();
-            yield();
-            return;
-        }
-
-        // if not we need to keep searching
-        switch (m_mode) {
-        case Mode::NEXT: {
-
-            // limit our view to the first 4096 bytes after m_starting_offset
-            std::string_view truncated_to_chunk_size =
-                contents.substr(0, m_starting_offset + 4096);
-
-            // if our last match has been partial
-            if (m_line_results.last_result_is_partial()) {
-                // try to extend the matcher
-                try_extend_last_match(truncated_to_chunk_size);
-            }
-            // then we start working on the rest by filling results again
-            fill_line_results_forwards(truncated_to_chunk_size);
-            break;
-        }
-        case Mode::PREV: {
-            std::string_view truncated_to_chunk_size =
-                contents.substr(0, m_ending_offset);
-            // because regex needs the entire line,
-            // we need to chunk a little weirdly.
-            fill_line_results_backwards(truncated_to_chunk_size);
-            break;
-        }
-        default:
-            break;
-        }
-
-        // then try again to see if we have new results
-        if (!m_line_results.at_last_result()) {
-            m_line_results.inc_result_idx();
-            yield();
-            return;
-        }
-    }
-
     bool can_search_more() const {
         return m_ending_offset > m_starting_offset;
     }
@@ -474,16 +471,20 @@ class RegexSearch : public SearchState {
 
     // already has an intermediate result
     bool has_result() const {
-        return m_line_results.empty();
+        return m_last_best_result.has_value();
     }
 
     // final position here
     bool has_position() const {
-        return m_line_results.empty();
+        return m_last_best_result.has_value();
     }
 
     size_t found_position() const {
-        return m_line_results.results.back().start;
+        if (!m_last_best_result) {
+            throw std::runtime_error(
+                "found_position: no valid position found.");
+        }
+        return m_last_best_result->start;
     }
 
     // pattern
@@ -491,124 +492,186 @@ class RegexSearch : public SearchState {
         return m_pattern;
     }
 
+    void run(std::string_view contents) {
+        switch (m_mode) {
+        case Mode::NEXT: {
+            size_t truncation_offset =
+                std::min(m_starting_offset + 4096, m_ending_offset);
+            contents = contents.substr(0, truncation_offset);
+            run_next(contents);
+            break;
+        }
+        case Mode::PREV: {
+            // decide to do these inside, not
+            // need to find the first newline before the chunk
+            contents = contents.substr(0, m_ending_offset);
+            run_prev(contents);
+            break;
+        }
+        default:
+            break;
+        }
+        yield();
+    }
+
   private:
-    void try_extend_last_match(std::string_view contents) {
-        // only call this is the last result is a partial match
-        assert(m_line_results.last_result_is_partial());
-        // the partial match should be pointing at our current starting offset
-        // for the new search
-        assert(!m_line_results.empty() &&
-               (m_line_results.results.back().start +
-                    m_line_results.results.back().length ==
-                m_starting_offset));
+    size_t test_partial_result(LineResults::Result result) const {
+        assert(result.is_partial);
 
-        size_t search_left_bound = m_starting_offset;
-        size_t first_newl = contents.find('\n', search_left_bound);
-        size_t search_length = (first_newl == std::string::npos)
-                                   ? contents.size() - search_left_bound
-                                   : first_newl - search_left_bound;
-        size_t search_result =
-            get_result_line(contents, search_left_bound, search_length,
-                            PCRE2_PARTIAL_HARD | PCRE2_NOTBOL);
+        auto copied_code = pcre2_code_copy(m_compiled_pcre_code);
+        auto temp_data =
+            pcre2_match_data_create_from_pattern(copied_code, nullptr);
 
-        m_starting_offset = (search_result == std::string::npos)
-                                ? contents.size()
-                                : search_result;
-    }
+        int match_result =
+            pcre2_match(copied_code, (PCRE2_SPTR8) "\0", 1, result.start,
+                        PCRE2_NOTBOL | PCRE2_PARTIAL_HARD, temp_data, nullptr);
 
-    void fill_line_results_forwards(std::string_view contents) {
-        if (m_starting_offset > 0 &&
-            contents.data()[m_starting_offset - 1] == '\n' &&
-            m_line_results.last_result_is_partial()) {
-            // remove the last partial result if we're starting on a new line
-            m_line_results.pop_back();
-        }
-
-        size_t search_left_bound = m_starting_offset;
-        size_t search_result;
-        while (search_left_bound < contents.size()) {
-            size_t first_newl = contents.find('\n', search_left_bound);
-
-            if (first_newl == std::string::npos) {
-                search_result = get_result_line(
-                    contents, search_left_bound,
-                    contents.size() - search_left_bound, PCRE2_PARTIAL_HARD);
-                break;
-            } else {
-                search_result = get_result_line(contents, search_left_bound,
-                                                first_newl - search_left_bound,
-                                                PCRE2_PARTIAL_HARD);
-                search_left_bound = (search_result == std::string::npos)
-                                        ? contents.size()
-                                        : search_result;
-            }
-        }
-
-        m_starting_offset = search_left_bound;
-    }
-
-    void fill_line_results_backwards(std::string_view contents) {
-        // make sure it's been truncated properly
-        assert(contents.size() == m_ending_offset);
-
-        if (m_line_results.last_result_is_partial()) {
-            // remove the last partial result since we're matching backwards
-            m_line_results.pop_back();
-        }
-
-        if (m_ending_offset == 0) {
-            return;
-        }
-
-        // prep the left boundary
-        size_t chunk_left_idx =
-            (m_ending_offset >= 4096) ? m_ending_offset - 4096 : 0;
-        chunk_left_idx = std::max(chunk_left_idx, m_starting_offset);
-
-        size_t search_right_bound = m_ending_offset;
-        size_t search_result;
-        while (search_right_bound > chunk_left_idx) {
-            size_t first_newl = contents.rfind('\n', search_right_bound - 1);
-            if (first_newl == std::string::npos) {
-                search_result =
-                    get_result_line(contents, chunk_left_idx,
-                                    search_right_bound - chunk_left_idx);
-                break;
-            } else {
-                search_result =
-                    get_result_line(contents, first_newl + 1,
-                                    search_right_bound - (first_newl + 1));
-                search_right_bound = (search_result == std::string::npos)
-                                         ? chunk_left_idx
-                                         : first_newl;
-            }
-        }
-
-        m_ending_offset = search_right_bound;
-    }
-
-    // returns the last index (exclusive) for which the matcher has either
-    // matched something or consumed
-    size_t get_result_line(std::string_view contents, size_t starting_offset,
-                           size_t search_length, uint32_t match_options = 0) {
-        int res = pcre2_match(
-            m_compiled_pcre_code, (PCRE2_SPTR8)contents.data(), search_length,
-            0, match_options | PCRE2_NOTEMPTY, m_match_data, nullptr);
-
-        // in the case of no matches
-        if (res == PCRE2_ERROR_NOMATCH || res == 1) {
+        if (match_result == PCRE2_ERROR_NOMATCH ||
+            match_result == PCRE2_ERROR_PARTIAL) {
             return std::string::npos;
         }
-
         auto ovector = pcre2_get_ovector_pointer(m_match_data);
-        // partial match occured
-        if (res == PCRE2_ERROR_PARTIAL) {
-            m_line_results.push_result(ovector[0], ovector[1], true);
-            return std::string::npos;
+        size_t to_return = ovector[1];
+
+        pcre2_code_free(copied_code);
+        pcre2_match_data_free(m_match_data);
+
+        return to_return;
+    }
+
+    bool update_if_complete() {
+        auto curr_res = m_line_results.get_curr_result();
+        assert(curr_res.is_complete || curr_res.is_partial);
+        if (curr_res.is_complete) {
+            m_last_best_result = curr_res;
+            return true;
+        }
+
+        if (size_t partial_end_offset = test_partial_result(curr_res);
+            partial_end_offset != std::string::npos) {
+            curr_res.is_complete = true;
+            curr_res.length = partial_end_offset - curr_res.start;
+            m_last_best_result = curr_res;
+            return true;
+        }
+        return false;
+    }
+
+    void run_next(std::string_view contents) {
+
+        // there is another result after us
+        if (!m_line_results.empty() && !m_line_results.at_last_result()) {
+            m_line_results.move_next();
+            // test and update the result. return if we got something good
+            if (update_if_complete()) {
+                return;
+            }
+        }
+
+        // should only enter this case either:
+        // when we are out of results or the last result
+        // is not complete.
+        // either way, we should only do this on the last result
+        assert(m_line_results.at_last_result());
+
+        // otherwise we know that we need to get more results
+        // make sure we're cleared
+        m_line_results.clear();
+
+        // start caching all the results we can find in the current contents
+        size_t curr_starting_offset = m_starting_offset;
+        fill_results_line(contents, curr_starting_offset, contents.size());
+
+        // update to our new starting offset
+        m_starting_offset = contents.size();
+
+        // if we have results, we start a new iterator
+        // and get the current result
+        if (!m_line_results.empty()) {
+            m_line_results.set_at_begin();
+            update_if_complete();
+        }
+    }
+
+    void run_prev(std::string_view contents) {
+
+        // there is another result after us
+        if (!m_line_results.empty() && !m_line_results.at_first_result()) {
+            m_line_results.move_back();
+            // test and update the result. return if we got something good
+            if (update_if_complete()) {
+                return;
+            }
+        }
+
+        assert(m_line_results.at_first_result());
+
+        // should be the case that we're right in front of some
+        // newl right now or 0
+        size_t curr_starting_offset;
+        if (m_ending_offset < 4096) {
+            curr_starting_offset = m_starting_offset;
         } else {
-            assert(res == 3);
-            m_line_results.push_result(ovector[0], ovector[1], false);
-            return ovector[1];
+            curr_starting_offset =
+                std::max(m_ending_offset - 4096, m_starting_offset);
+        }
+        assert(curr_starting_offset == 0 ||
+               contents.data()[curr_starting_offset - 1] == '\n');
+
+        if (size_t prev_newl = contents.rfind('\n', curr_starting_offset);
+            prev_newl != std::string::npos) {
+            curr_starting_offset = prev_newl;
+        } else {
+            // i dont like doing this
+            // but optimise away later.
+            curr_starting_offset = 0;
+        }
+
+        m_line_results.clear();
+
+        // start caching all the results we can find in the current contents
+        fill_results_line(contents, curr_starting_offset, contents.size());
+
+        // update to our new ending offset
+        assert(curr_starting_offset == contents.length());
+        // update m_ending_offset
+        m_ending_offset = curr_starting_offset;
+
+        // if we have results, we start a new iterator
+        // and get the current result
+        if (!m_line_results.empty()) {
+            m_line_results.set_at_end();
+            update_if_complete();
+        }
+    }
+
+    void fill_results_line(std::string_view contents, size_t left_bound,
+                           size_t right_bound) {
+
+        while (left_bound < right_bound) {
+            size_t match_length = right_bound - left_bound;
+            // can we just always turn NOTBOL on?
+            // need to not match empty string i think
+            uint32_t match_options = PCRE2_PARTIAL_HARD | PCRE2_NOTBOL;
+
+            int match_result = pcre2_match(
+                m_compiled_pcre_code, (PCRE2_SPTR8)contents.data(),
+                match_length, left_bound, match_options, m_match_data, nullptr);
+
+            if (match_result == PCRE2_ERROR_NOMATCH) {
+                left_bound = right_bound;
+            }
+
+            auto ovector = pcre2_get_ovector_pointer(m_match_data);
+            if (match_result == PCRE2_ERROR_PARTIAL) {
+                assert(ovector[1] == right_bound);
+                m_line_results.push_back_result(
+                    ovector[0], ovector[1] - ovector[0], true, false);
+            } else {
+                m_line_results.push_back_result(
+                    ovector[0], ovector[1] - ovector[0], false, true);
+            }
+            left_bound = ovector[1];
         }
     }
 };
