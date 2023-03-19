@@ -52,7 +52,7 @@ struct Main {
     std::vector<std::vector<View::Highlight>> m_highlight_offsets;
     // this is to help highlight stuff on screen so it persists beyond
     // the search state (which is only valid until the job is done)
-    SearchResult m_search_result;
+    std::optional<SearchResult> m_search_result;
 
     std::optional<Command> prev_command;
 
@@ -115,6 +115,7 @@ struct Main {
     void run_search();
     bool run_main();
     void run_follow_eof();
+    void handle_search_success();
 
     void set_command(std::string command, size_t cursor_pos) {
         m_command_str_buffer = std::move(command);

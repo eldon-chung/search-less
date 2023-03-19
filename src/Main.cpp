@@ -19,7 +19,7 @@
 void Main::update_screen_highlight_offsets() {
     // TODO: change this for regex
 
-    if (!m_search_result.has_pattern()) {
+    if (!m_search_result) {
         return;
     }
 
@@ -27,8 +27,8 @@ void Main::update_screen_highlight_offsets() {
     // that are visible on the screen right now.
 
     Page page = m_view.current_page();
-    size_t main_result_offset = m_search_result.offset();
-    size_t main_result_length = m_search_result.length();
+    size_t main_result_offset = m_search_result->offset();
+    size_t main_result_length = m_search_result->length();
 
     m_highlight_offsets.clear();
 
@@ -40,7 +40,7 @@ void Main::update_screen_highlight_offsets() {
 
         // this is already relative to our visual line
         auto line_offsets = basic_search_all(
-            page_line, m_search_result.pattern(), 0, page_line.size(),
+            page_line, m_search_result->pattern(), 0, page_line.size(),
             m_search_case != RegularSearch::Case::INSENSITIVE);
         line_highlights.clear();
         line_highlights.reserve(line_offsets.size());
@@ -73,8 +73,7 @@ void Main::display_command_or_status() {
         m_view.display_command(m_command_str_buffer, m_command_cursor_pos);
     } else if (!m_status_str_buffer.empty()) {
         m_view.display_status(m_status_str_buffer);
-    } else if (m_search_result.has_result() ||
-               m_content_handle->get_path().empty()) {
+    } else if (m_search_result || m_content_handle->get_path().empty()) {
         m_view.display_command(":", 1);
     } else {
         m_view.display_status(m_content_handle->get_path());
@@ -193,24 +192,24 @@ bool Main::run_main() {
     }
     case Command::TOGGLE_CASELESS: {
         set_command("", 0);
-        if (m_search_case == RegularSearch::Case::INSENSITIVE) {
-            m_search_case = RegularSearch::Case::SENSITIVE;
+        if (m_search_case == SearchState::Case::INSENSITIVE) {
+            m_search_case = SearchState::Case::SENSITIVE;
             m_view.display_status(command.payload_str +
                                   ": Caseless search disabled");
         } else {
-            m_search_case = RegularSearch::Case::INSENSITIVE;
+            m_search_case = SearchState::Case::INSENSITIVE;
             m_view.display_status(command.payload_str +
                                   ": Caseless search enabled");
         }
         break;
     }
     case Command::TOGGLE_CONDITIONALLY_CASELESS: {
-        if (m_search_case == RegularSearch::Case::CONDITIONALLY_SENSITIVE) {
-            m_search_case = RegularSearch::Case::SENSITIVE;
+        if (m_search_case == SearchState::Case::CONDITIONALLY_SENSITIVE) {
+            m_search_case = SearchState::Case::SENSITIVE;
             m_view.display_status(command.payload_str +
                                   ": Caseless search disabled");
         } else {
-            m_search_case = RegularSearch::Case::CONDITIONALLY_SENSITIVE;
+            m_search_case = SearchState::Case::CONDITIONALLY_SENSITIVE;
             m_view.display_status(
                 command.payload_str +
                 ": Conditionally caseless search enabled (case is "
@@ -257,7 +256,7 @@ bool Main::run_main() {
         m_highlight_active = true;
 
         // for now if search pattern is empty, we just break
-        if (!m_search_result.has_pattern()) {
+        if (!m_search_result) {
             set_status("No previous search pattern.");
             break;
         }
@@ -267,12 +266,13 @@ bool Main::run_main() {
             break;
         }
 
-        std::string search_pattern = std::string(m_search_result.pattern());
+        std::string search_pattern = m_search_result->pattern();
         size_t end = m_view.get_starting_offset();
-        if (m_search_result.has_result()) {
-            end = std::max(end, m_search_result.offset());
+        if (m_search_result->has_position()) {
+            end = std::max(end, m_search_result->offset());
         }
 
+        m_search_state.reset();
         m_search_state = std::make_unique<RegularSearch>(
             std::move(search_pattern), RegularSearch::Mode::PREV, end,
             m_search_case, std::max((size_t)1, command.payload_num));
@@ -288,21 +288,21 @@ bool Main::run_main() {
         m_highlight_active = true;
 
         // for now if search pattern is empty, we just break
-        if (!m_search_result.has_pattern()) {
+        if (!m_search_result) {
             set_status("No previous search pattern.");
             break;
         }
 
         // we are guaranteed they will be initialised
-
-        std::string search_pattern = std::string(m_search_result.pattern());
-        size_t start;
-        if (!m_search_result.has_result()) {
-            start = m_view.get_starting_offset();
-        } else {
-            start = m_search_result.offset() + m_search_result.pattern().size();
+        std::string search_pattern = m_search_result->pattern();
+        size_t start = m_view.get_starting_offset();
+        if (m_search_result->has_position()) {
+            start = std::min(m_search_result->offset() +
+                                 m_search_result->pattern().size(),
+                             start);
         }
 
+        m_search_state.reset();
         m_search_state = std::make_unique<RegularSearch>(
             std::move(search_pattern), RegularSearch::Mode::NEXT, start,
             m_search_case, std::max((size_t)1, command.payload_num));
@@ -319,12 +319,14 @@ bool Main::run_main() {
         std::string search_pattern = command.payload_str;
         size_t start = m_view.get_starting_offset();
 
+        m_search_state.reset();
         m_search_state = std::make_unique<RegularSearch>(
             std::move(search_pattern), RegularSearch::Mode::NEXT, start,
             m_search_case, std::max((size_t)1, command.payload_num));
-
-        m_search_result.clear();
         m_search_state->schedule();
+
+        // clear out the old search result
+        m_search_result = {};
 
         m_view.display_status("searching...");
         break;
@@ -338,7 +340,7 @@ bool Main::run_main() {
         break;
     }
     case Command::TOGGLE_HIGHLIGHTING: {
-        if (!m_search_result.has_pattern()) {
+        if (!m_search_result) {
             set_status("No previous search pattern.");
             break;
         }
@@ -349,7 +351,7 @@ bool Main::run_main() {
         break;
     }
     case Command::SEARCH_CLEAR: {
-        m_search_result.clear();
+        m_search_result = {};
         set_command("", 0);
         m_highlight_active = false;
         set_status("Search cleared.");
@@ -447,56 +449,45 @@ int main(int argc, char **argv) {
     }
 }
 
+void Main::handle_search_success() {
+    // prepare the search result
+    m_search_result = m_search_state->get_result();
+
+    // in the case we need to move the view
+    if (m_search_result->found_offset >= m_view.get_ending_offset() ||
+        m_search_result->found_offset < m_view.get_starting_offset()) {
+        m_view.move_to_byte_offset(m_search_state->found_position());
+    }
+
+    // clean up the search state
+    m_search_state.reset();
+
+    // turn highlighting on
+    m_highlight_active = true;
+
+    // render the new page
+    display_page();
+    m_view.display_status("found result");
+}
+
 void Main::run_search() {
     // process search results here
 
-    // if it isn't done we run it for one round
-    if (!m_search_state->is_done()) {
-        m_search_state->run(m_content_handle->get_contents());
-    }
+    // run search for a round
+    m_search_state->run(m_content_handle->get_contents());
 
-    // if it still hasn't completed we go do something else
-    if (!m_search_state->is_done()) {
+    // return if it's done
+    if (m_search_state->is_done()) {
+        handle_search_success();
         return;
     }
 
-    // otherwise at this moment it's done
-    // and we need to process the current state
-    assert(m_search_state->num_iter() >= 1);
-
-    auto handle_success = [this]() {
-        // in the case we need to move the view
-        if (m_search_state->found_position() >= m_view.get_ending_offset() ||
-            m_search_state->found_position() < m_view.get_starting_offset()) {
-            m_view.move_to_byte_offset(m_search_state->found_position());
-        }
-
-        // prepare the search result
-        m_search_result = {m_search_state->pattern(),
-                           m_search_state->found_position()};
-
-        // clean up the search state
-        m_search_state.reset();
-
-        // turn highlighting on
-        m_highlight_active = true;
-
-        // render the new page
-        display_page();
-        m_view.display_status("found result");
-    };
-
-    // if the current iteration has found something new
-    if (m_search_state->has_result()) {
-        if (--(m_search_state->num_iter()) == 0) {
-            handle_success();
-        } else {
-            m_search_state->schedule();
-        }
+    if (m_search_state->can_search_more()) {
+        m_search_state->schedule();
         return;
     }
 
-    // if we need more content and can provide
+    // if it's not done and needs more, and we can load content
     if (m_search_state->needs_more(m_content_handle->size()) &&
         m_content_handle->has_changed()) {
         m_content_handle->read_more();
@@ -504,18 +495,16 @@ void Main::run_search() {
         return;
     }
 
-    // if we have a prior success
+    // else at this point no more running can be done
     if (m_search_state->has_position()) {
-        handle_success();
+        handle_search_success();
         return;
     }
 
     // else we don't have anything to show for it
     m_view.display_status("Pattern not found");
-    if (!m_search_result.has_pattern()) {
-        // then this is a fresh new search
-        m_search_result = {m_search_state->pattern(), std::string::npos};
-    }
+    m_search_result = m_search_state->get_result();
+
     m_search_state.reset();
 }
 

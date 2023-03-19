@@ -30,25 +30,90 @@ size_t basic_search_last(std::string_view file_contents,
                          size_t ending_offset, bool caseless = false);
 // Base class for long running search tasks that need to be scheduled
 // Do not use this if you're only trying to search within a page itself
-class SearchState {
 
-  protected:
-    size_t m_starting_offset;
-    size_t m_ending_offset;
-    size_t m_num_iter;
+struct SearchResult {
+    enum class Type {
+        Regular,
+        Regex,
+    };
+    std::string search_pattern;
+    size_t found_offset;
+    size_t found_length;
+    Type search_type;
 
-    bool m_is_running;
-    bool m_need_more;
-
-    SearchState(size_t starting_offset, size_t ending_offset,
-                size_t num_iterations, bool is_running, bool need_more)
-        : m_starting_offset(starting_offset), m_ending_offset(ending_offset),
-          m_num_iter(num_iterations), m_is_running(is_running),
-          m_need_more(need_more) {
+    std::string pattern() const {
+        return search_pattern;
     }
 
-    virtual ~SearchState(){};
+    size_t offset() const {
+        return found_offset;
+    }
 
+    size_t length() const {
+        return found_length;
+    }
+
+    Type type() const {
+        return search_type;
+    }
+
+    bool has_position() const {
+        return found_offset != std::string::npos;
+    }
+};
+
+struct ResultsList {
+    std::vector<SearchResult> results;
+    size_t idx;
+
+    ResultsList() {
+        idx = 0;
+    }
+
+    void clear() {
+        results.clear();
+        idx = 0;
+    }
+
+    void push_back(SearchResult res) {
+        results.push_back(std::move(res));
+    }
+
+    void start_at_front() {
+        if (results.empty()) {
+            throw std::runtime_error("can't start on empty results list");
+        }
+        idx = 0;
+    }
+
+    void start_at_back() {
+        if (results.empty()) {
+            throw std::runtime_error("can't start on empty results list");
+        }
+        idx = results.size() - 1;
+    }
+
+    SearchResult get_curr_result() {
+        assert(idx < results.size());
+        return results[idx];
+    }
+
+    void move_to_back() {
+        if (results.empty() || idx == results.size() - 1) {
+            throw std::runtime_error("can't move further back");
+        }
+        ++idx;
+    }
+
+    void move_to_front() {
+        if (results.empty() || idx == 0) {
+            throw std::runtime_error("can't move further front");
+        }
+        --idx;
+    }
+};
+
+class SearchState {
   public:
     enum class Case {
         SENSITIVE,
@@ -61,7 +126,33 @@ class SearchState {
         PREV,
     };
 
-    size_t &num_iter() {
+  protected:
+    std::string m_pattern;
+    size_t m_starting_offset;
+    size_t m_ending_offset;
+    size_t m_num_iter;
+    std::optional<SearchResult> m_found_position;
+
+    Mode m_mode;
+    Case m_case;
+
+    bool m_is_running;
+    bool m_need_more;
+
+    SearchState(std::string pattern, size_t offset, Mode mode, Case search_case,
+                size_t num_iterations)
+        : m_pattern(std::move(pattern)),
+          m_starting_offset(mode_to_start(mode, offset)),
+          m_ending_offset(mode_to_end(mode, offset)),
+          m_num_iter(num_iterations), m_mode(mode), m_case(search_case),
+          m_is_running(true), m_need_more(false),
+          m_found_position(std::nullopt) {
+    }
+
+    virtual ~SearchState(){};
+
+  public:
+    size_t num_iter() const {
         return m_num_iter;
     }
 
@@ -76,35 +167,22 @@ class SearchState {
     virtual bool needs_more(size_t content_length) const = 0;
     virtual void yield() = 0;
     virtual void schedule() = 0;
-    virtual size_t starting() const = 0;
     virtual void run(std::string_view contents) = 0;
     virtual bool can_search_more() const = 0;
     virtual bool is_done() const = 0;
     virtual bool has_result() const = 0;
-    virtual bool has_position() const = 0;
-    virtual size_t found_position() const = 0;
+    virtual SearchResult get_result() const = 0;
     virtual std::string pattern() const = 0;
 };
 
 class RegularSearch : public SearchState {
     static const size_t SEARCH_BLOCK_SIZE = 4096;
+    ResultsList m_results_list;
 
   public:
-  private:
-    size_t m_found_position;
-    size_t m_current_result;
-    // can we merge these two?
-    std::string m_pattern;
-    Mode m_mode;
-    Case m_case;
-
-  public:
-    RegularSearch(std::string pattern, Mode mode, size_t offset,
+    RegularSearch(std::string pattern, size_t offset, Mode mode,
                   Case sensitivity = Case::INSENSITIVE, size_t num_iter = 1)
-        : SearchState(mode_to_start(mode, offset), mode_to_end(mode, offset),
-                      num_iter, true, false),
-          m_found_position(std::string::npos), m_pattern(std::move(pattern)),
-          m_mode(mode), m_case(sensitivity) {
+        : SearchState(std::move(pattern), offset, mode, sensitivity, num_iter) {
         assert(!m_pattern.empty());
         // assert(m_starting_offset < m_ending_offset);
     }
@@ -253,37 +331,6 @@ class RegularSearch : public SearchState {
     }
 };
 
-struct SearchResult {
-    std::string m_search_pattern;
-    // a global offset for the current main that we have
-    size_t m_result_offset;
-
-    std::string_view pattern() const {
-        return m_search_pattern;
-    }
-
-    size_t length() const {
-        return m_search_pattern.size();
-    }
-
-    bool has_pattern() const {
-        return !m_search_pattern.empty();
-    }
-
-    size_t offset() const {
-        return m_result_offset;
-    }
-
-    bool has_result() const {
-        return m_result_offset != std::string::npos;
-    }
-
-    void clear() {
-        m_search_pattern.clear();
-        m_result_offset = std::string::npos;
-    }
-};
-
 // wraps the PCRE stuff
 class RegexSearch : public SearchState {
     // unlike regular search we'll run on entire chunk sizes
@@ -297,12 +344,16 @@ class RegexSearch : public SearchState {
             bool is_partial;
             bool is_complete;
         };
-        std::deque<Result> results;
-        std::optional<std::deque<Result>::iterator> curr_result;
+        std::vector<Result> results;
+        std::optional<std::vector<Result>::iterator> curr_result;
         // add api here to increment result_idx
 
         bool has_it() const {
             return curr_result.has_value();
+        }
+
+        size_t size() const {
+            return results.size();
         }
 
         bool empty() const {
@@ -330,7 +381,7 @@ class RegexSearch : public SearchState {
         }
 
         // might have an issue if it's only a strictly partial match
-        Result get_curr_result() {
+        Result get_curr_result() const {
             return **curr_result;
         }
 
@@ -382,11 +433,6 @@ class RegexSearch : public SearchState {
         }
 
       private:
-        void push_front(size_t offset, size_t length, bool is_partial,
-                        bool is_complete) {
-            results.push_front({offset, length, is_partial, is_complete});
-        }
-
         void push_back(size_t offset, size_t length, bool is_partial,
                        bool is_complete) {
             if (has_it()) {
@@ -457,10 +503,6 @@ class RegexSearch : public SearchState {
         m_is_running = true;
     }
 
-    size_t starting() const {
-        return m_starting_offset;
-    }
-
     bool can_search_more() const {
         return m_ending_offset > m_starting_offset;
     }
@@ -471,7 +513,23 @@ class RegexSearch : public SearchState {
 
     // already has an intermediate result
     bool has_result() const {
-        return m_last_best_result.has_value();
+        if (m_last_best_result) {
+            return true;
+        }
+
+        if (!m_line_results.empty()) {
+            // if last best result was not set
+            // it must be because m_line_results has only one partial match
+            assert(m_line_results.empty() == 1);
+
+            LineResults::Result res = m_line_results.get_curr_result();
+            assert(!res.is_complete && res.is_partial);
+
+            auto maybe_partial_result = test_partial_result(res);
+            return maybe_partial_result.has_value();
+        }
+
+        return false;
     }
 
     // final position here
@@ -515,7 +573,8 @@ class RegexSearch : public SearchState {
     }
 
   private:
-    size_t test_partial_result(LineResults::Result result) const {
+    std::optional<std::pair<size_t, size_t>>
+    test_partial_result(LineResults::Result result) const {
         assert(result.is_partial);
 
         auto copied_code = pcre2_code_copy(m_compiled_pcre_code);
@@ -528,10 +587,10 @@ class RegexSearch : public SearchState {
 
         if (match_result == PCRE2_ERROR_NOMATCH ||
             match_result == PCRE2_ERROR_PARTIAL) {
-            return std::string::npos;
+            return std::nullopt;
         }
         auto ovector = pcre2_get_ovector_pointer(m_match_data);
-        size_t to_return = ovector[1];
+        std::pair<size_t, size_t> to_return = {ovector[0], ovector[1]};
 
         pcre2_code_free(copied_code);
         pcre2_match_data_free(m_match_data);
@@ -543,14 +602,6 @@ class RegexSearch : public SearchState {
         auto curr_res = m_line_results.get_curr_result();
         assert(curr_res.is_complete || curr_res.is_partial);
         if (curr_res.is_complete) {
-            m_last_best_result = curr_res;
-            return true;
-        }
-
-        if (size_t partial_end_offset = test_partial_result(curr_res);
-            partial_end_offset != std::string::npos) {
-            curr_res.is_complete = true;
-            curr_res.length = partial_end_offset - curr_res.start;
             m_last_best_result = curr_res;
             return true;
         }
@@ -574,7 +625,7 @@ class RegexSearch : public SearchState {
         // either way, we should only do this on the last result
         assert(m_line_results.at_last_result());
 
-        // otherwise we know that we need to get more results
+        // we know that we need to get more results
         // make sure we're cleared
         m_line_results.clear();
 
@@ -623,7 +674,7 @@ class RegexSearch : public SearchState {
             curr_starting_offset = prev_newl;
         } else {
             // i dont like doing this
-            // but optimise away later.
+            // but optimise for this case later.
             curr_starting_offset = 0;
         }
 
@@ -632,10 +683,11 @@ class RegexSearch : public SearchState {
         // start caching all the results we can find in the current contents
         fill_results_line(contents, curr_starting_offset, contents.size());
 
-        // update to our new ending offset
-        assert(curr_starting_offset == contents.length());
         // update m_ending_offset
-        m_ending_offset = curr_starting_offset;
+        // we want to include the newline later on to
+        // force only full matches, hence the +1
+        m_ending_offset =
+            (curr_starting_offset == 0) ? 0 : curr_starting_offset + 1;
 
         // if we have results, we start a new iterator
         // and get the current result
