@@ -40,6 +40,25 @@ template <typename T> struct Channel {
         cond.notify_one();
     }
 
+    std::optional<T> try_pop() {
+        std::unique_lock lock(mut);
+
+        if (sig_que_state & 0x2) {
+            T val = std::move(sig_que);
+            sig_que_state = 0;
+            return val;
+        }
+
+        if (!que.empty()) {
+            T top = std::move(que.front());
+            que.pop();
+            return top;
+        }
+
+        // queue is empty
+        return std::nullopt;
+    }
+
     std::optional<T> pop() {
         std::unique_lock lock(mut);
         cond.wait(lock, [this]() {

@@ -1,5 +1,8 @@
 #include "search.h"
+#include <memory>
 
+#define PCRE2_CODE_UNIT_WIDTH 8
+#include <pcre2.h>
 #include <string.h>
 
 #include <algorithm>
@@ -22,25 +25,6 @@ void tolower(std::string_view in, char *out) {
 
 void approx_tolower(std::string_view in, char *out) {
     approx_tolower(in.data(), in.data() + in.length(), out);
-}
-
-std::vector<size_t> basic_search_all(std::string_view file_contents,
-                                     std::string_view pattern,
-                                     size_t beginning_offset,
-                                     size_t ending_offset,
-                                     bool caseless /* = false */) {
-    std::vector<size_t> out;
-    while (true) {
-        size_t offset = basic_search_first(
-            file_contents, pattern, beginning_offset, ending_offset, caseless);
-        if (offset == std::string::npos) {
-            break;
-        }
-        out.push_back(offset);
-        // i think this is flawed
-        beginning_offset = offset + pattern.size();
-    }
-    return out;
 }
 
 size_t basic_search_first(std::string_view file_contents,
@@ -135,6 +119,7 @@ size_t basic_search_first(std::string_view file_contents,
 size_t basic_search_last(std::string_view file_contents,
                          std::string_view pattern, size_t beginning_offset,
                          size_t ending_offset, bool caseless /* = false */) {
+    assert(caseless == false);
     std::string_view sub_contents = file_contents.substr(
         beginning_offset, ending_offset - beginning_offset);
 
@@ -144,4 +129,65 @@ size_t basic_search_last(std::string_view file_contents,
     } else {
         return beginning_offset + result;
     }
+}
+
+namespace pcre2 {
+using Code =
+    std::unique_ptr<pcre2_code,
+                    decltype([](pcre2_code *re) { pcre2_code_free(re); })>;
+Code compile(std::string_view pattern) {
+    int errornumber;
+    PCRE2_SIZE erroroffset;
+    return Code{pcre2_compile((PCRE2_SPTR8)pattern.data(),
+                              (PCRE2_SIZE)pattern.size(),
+                              0,            /* default options */
+                              &errornumber, /* for error number */
+                              &erroroffset, /* for error offset */
+                              NULL)};       /* use default compile context */
+}
+
+std::optional<std::pair<size_t, size_t>> match(const Code &code,
+                                               std::string_view subject) {
+    pcre2_match_data *match_data =
+        pcre2_match_data_create_from_pattern(code.get(), NULL);
+
+    int rc = pcre2_match(code.get(),                  /* the compiled pattern */
+                         (PCRE2_SPTR8)subject.data(), /* the subject string */
+                         subject.length(), /* the length of the subject */
+                         0,          /* start at offset 0 in the subject */
+                         0,          /* default options */
+                         match_data, /* block for storing the result */
+                         NULL);      /* use default match context */
+
+    if (rc < 0) {
+        return std::nullopt;
+    }
+    PCRE2_SIZE *ovector = pcre2_get_ovector_pointer(match_data);
+    auto ret = std::make_pair(ovector[0], ovector[1]);
+    pcre2_match_data_free(match_data);
+    return ret;
+}
+
+} // namespace pcre2
+
+size_t regex_search_first(std::string_view file_contents,
+                          std::string_view pattern, size_t beginning_offset,
+                          size_t ending_offset, bool caseless /* =false */) {
+    assert(caseless == false);
+    pcre2::Code re = pcre2::compile(pattern);
+
+    std::optional<std::pair<size_t, size_t>> ret = pcre2::match(
+        re, file_contents.substr(beginning_offset,
+                                 ending_offset - beginning_offset));
+    if (!ret) {
+        return std::string_view::npos;
+    }
+    return ret->first + beginning_offset;
+}
+
+size_t regex_search_last(std::string_view file_contents,
+                         std::string_view pattern, size_t beginning_offset,
+                         size_t ending_offset, bool caseless /* =false */) {
+    assert(caseless == false);
+    return std::string_view::npos;
 }

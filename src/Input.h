@@ -45,7 +45,9 @@ struct InputThread {
     InputThread(InputThread &&) = delete;
     InputThread &operator=(InputThread &&) = delete;
     ~InputThread() {
-        t.join();
+        if (t.joinable()) {
+            t.join();
+        }
     }
 
     void poll() {

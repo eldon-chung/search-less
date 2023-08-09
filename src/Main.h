@@ -26,6 +26,8 @@
 #include "PipeHandle.h"
 
 struct Main {
+    constexpr static size_t npos = std::string::npos;
+
     Channel<Command> m_chan;
     Channel<std::function<void(void)>> m_task_chan;
 
@@ -42,17 +44,21 @@ struct Main {
 
     bool m_highlight_active;
 
-    RegularSearch::Case m_search_case;
+    enum class SearchCase {
+        SENSITIVE,
+        CONDITIONALLY_SENSITIVE,
+        INSENSITIVE,
+    };
+    SearchCase m_search_case;
+    std::string m_search_pattern;
+    size_t m_last_known_search_result;
+    std::future<size_t> m_search_result;
 
     std::string m_status_str_buffer;
     std::string m_command_str_buffer;
     size_t m_command_cursor_pos;
 
-    std::unique_ptr<RegularSearch> m_search_state;
     std::vector<std::vector<View::Highlight>> m_highlight_offsets;
-    // this is to help highlight stuff on screen so it persists beyond
-    // the search state (which is only valid until the job is done)
-    SearchResult m_search_result;
 
     std::optional<Command> prev_command;
 
@@ -68,10 +74,10 @@ struct Main {
           m_view(View::create(&m_nc_mutex, m_content_handle.get(), tty)),
           m_input(&m_nc_mutex, &m_chan, tty, std::move(history_filename),
                   history_maxsize),
-          m_taskmaster(&m_task_chan), m_highlight_active(true),
-          m_search_case(RegularSearch::Case::SENSITIVE),
-          m_search_result({"", std::string::npos}), m_following_eof(false),
-          m_time_commands(time_commands) {
+          m_taskmaster(&m_task_chan), m_highlight_active(false),
+          m_search_case(SearchCase::SENSITIVE), m_search_pattern(),
+          /* m_search_result({"", std::string::npos}), */
+          m_following_eof(false), m_time_commands(time_commands) {
         register_signal_handlers(&m_chan);
 
         display_page();
