@@ -49,7 +49,7 @@ PRECIOUS_TARGETS += $(OBJDIR)/%.o
 # PKGCONFIG_LIBS += openssl
 PKGCONFIG_LIBS += ncurses
 PKGCONFIG_LIBS += readline
-PKGCONFIG_LIBS += libpcre
+PKGCONFIG_LIBS += libpcre2-8
 
 # Example: adding boost_system (can't use pkg-config cause they dumb)
 # LDFLAGS += -lboost_system
@@ -74,7 +74,7 @@ PKGCONFIG_LIBS += libpcre
 ifdef PKGCONFIG_LIBS
 CXXFLAGS += $(shell pkg-config --cflags $(PKGCONFIG_LIBS))
 CFLAGS += $(shell pkg-config --cflags $(PKGCONFIG_LIBS))
-LDFLAGS += $(shell pkg-config --libs $(PKGCONFIG_LIBS))
+LDLIBS += $(shell pkg-config --libs $(PKGCONFIG_LIBS))
 endif
 
 # Targets
