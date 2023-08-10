@@ -31,7 +31,7 @@ void Main::update_screen_highlight_offsets() {
         size_t line_base_offset = page.get_nth_offset(idx);
 
         // this is already relative to our visual line
-        auto line_offsets = search_all(basic_search_first, page_line,
+        auto line_offsets = search_all(regex_search_first, page_line,
                                        m_search_pattern, 0, page_line.size(),
                                        m_search_case != SearchCase::SENSITIVE);
         line_highlights.clear();
@@ -95,8 +95,7 @@ bool Main::run_main() {
     }
 
     if (m_chan.empty() && m_following_eof) {
-        // if there isn't a command and there is an ongoing search
-        // we can just continue the search
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
         return false;
     }
 
@@ -115,6 +114,7 @@ bool Main::run_main() {
         if (c) {
             command = *c;
         } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
             return false;
         }
     } else {
@@ -192,7 +192,15 @@ bool Main::run_main() {
         break;
     case Command::VIEW_EOF:
         if (m_content_handle->has_changed()) {
-            m_content_handle->read_to_eof();
+            // If the pipe is fast (it refills within 10ms), then read more.
+            // However have a hard cutoff of 1s so it doesn't hang for
+            // dripping pipes.
+            auto start = std::chrono::steady_clock::now();
+            while (m_content_handle->read_to_eof() &&
+                   std::chrono::steady_clock::now() - start <
+                       std::chrono::seconds(1)) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
         }
         m_view.move_to_end();
         display_page();
@@ -303,7 +311,7 @@ bool Main::run_main() {
         m_search_result = promise.get_future();
         std::thread{[=, this, promise = std::move(promise)]() mutable {
             promise.set_value(search_backward_n(
-                basic_search_last, std::max((size_t)1, command.payload_num),
+                regex_search_last, std::max((size_t)1, command.payload_num),
                 m_content_handle->get_contents(), search_pattern, 0, end,
                 m_search_case != SearchCase::SENSITIVE));
         }}.detach();
@@ -498,7 +506,8 @@ void Main::run_follow_eof() {
     }
     m_view.move_to_end();
     display_page();
-    m_view.display_status("Waiting for data... (interrupt to abort)");
+    m_view.display_status("Waiting for data... (interrupt to abort) " +
+                          std::to_string(rand()));
 }
 
 void Main::run() {

@@ -3,8 +3,10 @@
 #include <fcntl.h>
 #include <filesystem>
 #include <stddef.h>
+#include <string.h>
 #include <string_view>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
 
@@ -47,7 +49,7 @@ class PipeHandle final : public ContentHandle {
     }
 
   private:
-    ssize_t read_into_temp(size_t num_to_read = 4096) {
+    ssize_t read_into_temp(size_t num_to_read = 1 * 1024 * 1024 * 1024) {
 
         // get the temp file size
         // so we know where to start writing to the file
@@ -77,16 +79,19 @@ class PipeHandle final : public ContentHandle {
         fstat(m_temp_fd, &statbuf);
         size_t curr_file_size = (size_t)statbuf.st_size;
 
-        // potentially needs an unmap.
-        if (m_contents.data()) {
-            munmap((void *)m_contents.data(), m_contents.size());
+        char *new_contents_ptr =
+            m_contents.data()
+                ? (char *)mremap((void *)m_contents.data(), m_contents.size(),
+                                 curr_file_size, MREMAP_MAYMOVE)
+                : (char *)mmap(NULL, curr_file_size, PROT_READ, MAP_PRIVATE,
+                               m_temp_fd, 0);
+        if ((void *)new_contents_ptr == MAP_FAILED) {
+            // Map failed for some reason
+            fprintf(stderr, "mremap or mmap error. %s\n", strerror(errno));
+            exit(1);
         }
-
-        // remap now
-        char *new_contents_ptr = (char *)mmap(NULL, curr_file_size, PROT_READ,
-                                              MAP_PRIVATE, m_temp_fd, 0);
-
         m_contents = {new_contents_ptr, new_contents_ptr + curr_file_size};
+
         return ret_val;
     }
 

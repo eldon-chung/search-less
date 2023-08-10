@@ -1,13 +1,16 @@
 #include "search.h"
-#include <memory>
 
 #define PCRE2_CODE_UNIT_WIDTH 8
 #include <pcre2.h>
 #include <string.h>
 
 #include <algorithm>
+#include <map>
+#include <memory>
 #include <optional>
 #include <string>
+
+namespace {
 
 void tolower(const char *s, const char *end, char *out) {
     std::transform(s, end, out, [](char c) {
@@ -26,6 +29,58 @@ void tolower(std::string_view in, char *out) {
 void approx_tolower(std::string_view in, char *out) {
     approx_tolower(in.data(), in.data() + in.length(), out);
 }
+
+std::vector<std::pair<size_t, size_t>> chunks(std::string_view file_contents,
+                                              size_t beginning_offset,
+                                              size_t ending_offset,
+                                              size_t min_chunk_size) {
+    std::vector<std::pair<size_t, size_t>> out;
+    while (beginning_offset != ending_offset) {
+        size_t approx_cur_chunk_end =
+            std::min(beginning_offset + min_chunk_size, ending_offset);
+        if (approx_cur_chunk_end == ending_offset) {
+            out.push_back({beginning_offset, ending_offset});
+            break;
+        }
+        size_t cur_chunk_end =
+            file_contents.find_first_of('\n', approx_cur_chunk_end);
+        if (cur_chunk_end == std::string_view::npos) {
+            cur_chunk_end = ending_offset;
+        } else {
+            cur_chunk_end = std::min(cur_chunk_end + 1, ending_offset);
+        }
+
+        out.push_back({beginning_offset, cur_chunk_end});
+        beginning_offset = cur_chunk_end;
+    }
+    return out;
+}
+
+std::pair<std::string, std::map<size_t, size_t>>
+flip_by_lines(std::string_view str) {
+    std::pair<std::string, std::map<size_t, size_t>> out;
+    auto &[out_str, out_map] = out;
+
+    out_str.reserve(str.length());
+
+    while (!str.empty()) {
+        size_t last_newline = str.find_last_of('\n');
+        if (last_newline == std::string_view::npos) {
+            out_map.insert({out_str.size(), 0});
+            out_str.append(str);
+            break;
+        } else {
+            out_map.insert({out_str.size(), last_newline + 1});
+            out_str.append(str.substr(last_newline + 1));
+            out_str.push_back('\n');
+            str = str.substr(0, last_newline);
+        }
+    }
+
+    return out;
+}
+
+} // namespace
 
 size_t basic_search_first(std::string_view file_contents,
                           std::string_view pattern, size_t beginning_offset,
@@ -176,18 +231,53 @@ size_t regex_search_first(std::string_view file_contents,
     assert(caseless == false);
     pcre2::Code re = pcre2::compile(pattern);
 
-    std::optional<std::pair<size_t, size_t>> ret = pcre2::match(
-        re, file_contents.substr(beginning_offset,
-                                 ending_offset - beginning_offset));
-    if (!ret) {
-        return std::string_view::npos;
+    // split into line-aligned 4MB chunks
+    for (auto [chunk_start, chunk_end] : chunks(
+             file_contents, beginning_offset, ending_offset, 4 * 1024 * 1024)) {
+        std::optional<std::pair<size_t, size_t>> ret = pcre2::match(
+            re, file_contents.substr(chunk_start, chunk_end - chunk_start));
+        if (ret) {
+            return ret->first + chunk_start;
+        }
     }
-    return ret->first + beginning_offset;
+    return std::string_view::npos;
 }
 
 size_t regex_search_last(std::string_view file_contents,
                          std::string_view pattern, size_t beginning_offset,
                          size_t ending_offset, bool caseless /* =false */) {
     assert(caseless == false);
+    pcre2::Code re = pcre2::compile(pattern);
+
+    // split into line-aligned 4MB chunks
+    auto ch =
+        chunks(file_contents, beginning_offset, ending_offset, 4 * 1024 * 1024);
+    for (auto it = ch.rbegin(); it != ch.rend(); ++it) {
+        auto [chunk_start, chunk_end] = *it;
+        std::optional<std::pair<size_t, size_t>> ret = pcre2::match(
+            re, file_contents.substr(chunk_start, chunk_end - chunk_start));
+        if (ret) {
+            // Found first matching chunk, now flip that chunk by lines and then
+            // search on it
+            auto [flipped_chunk, flip_map] = flip_by_lines(
+                file_contents.substr(chunk_start, chunk_end - chunk_start));
+
+            std::optional<std::pair<size_t, size_t>> actual_ret =
+                pcre2::match(re, flipped_chunk);
+
+            assert(actual_ret);
+
+            size_t line_offset_of_match =
+                flipped_chunk.find_last_of('\n', actual_ret->first);
+            if (line_offset_of_match == std::string_view::npos) {
+                line_offset_of_match = 0;
+            } else {
+                ++line_offset_of_match;
+            }
+            size_t original_line_offset = flip_map[line_offset_of_match];
+            return actual_ret->first - line_offset_of_match +
+                   original_line_offset + chunk_start;
+        }
+    }
     return std::string_view::npos;
 }

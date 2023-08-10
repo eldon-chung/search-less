@@ -57,8 +57,8 @@ struct View {
         start_color();
         use_default_colors();
         noecho();
-        // raw();
-        cbreak();
+        raw();
+        /* cbreak(); */
         curs_set(0);
         keypad(stdscr, TRUE);
         nodelay(stdscr, TRUE);
@@ -216,7 +216,6 @@ struct View {
 
     void
     display_page_at(std::vector<std::vector<Highlight>> const &highlight_list) {
-
         std::scoped_lock lock(*m_nc_mutex);
 
         werase(m_main_window_ptr);
@@ -224,10 +223,12 @@ struct View {
         Page page = current_page();
         // assert(highlight_list.size() == page.get_num_lines());
 
+        std::string curr_line;
+        curr_line.reserve(m_main_window_width);
         for (size_t row_idx = 0; row_idx < m_main_window_height; ++row_idx) {
             if (row_idx < page.get_num_lines()) {
-                std::string_view curr_line = page.get_nth_line(
-                    m_content_handle->get_contents(), row_idx);
+                curr_line = page.get_nth_line(m_content_handle->get_contents(),
+                                              row_idx);
                 mvwaddnstr(m_main_window_ptr, row_idx, 0, curr_line.data(),
                            std::min(curr_line.size(), m_main_window_width));
             } else {

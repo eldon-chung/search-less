@@ -1,7 +1,9 @@
 all: my_all
 
 DEBUG := 1
-SANITIZE := $(DEBUG)
+ifeq ($(DEBUG), 1)
+SANITIZE := thread
+endif
 
 CXX := clang++
 ifeq ($(DEBUG), 1)
@@ -20,8 +22,8 @@ CXXWERROR += -Wno-error=unused-function
 CXXWERROR += -Wconversion
 CXXWERROR += -Wno-unused-but-set-variable
 CXXFLAGS := -g -std=c++20 -Isrc -fno-omit-frame-pointer
-ifeq ($(SANITIZE), 1)
-CXXFLAGS += -fsanitize=thread
+ifneq ($(SANITIZE),0)
+CXXFLAGS += -fsanitize=$(SANITIZE)
 endif
 CXXFLAGS += $(CXXOPT)
 CXXFLAGS += $(CXXWARNINGS)
@@ -32,6 +34,9 @@ BUILDDIR := build
 OBJDIR := $(BUILDDIR)/objs-$(CXX)
 ifneq ($(DEBUG), 1)
 OBJDIR := $(OBJDIR)-release
+endif
+ifneq ($(SANITIZE),0)
+OBJDIR := $(OBJDIR)-$(SANITIZE)
 endif
 PRECIOUS_TARGETS += $(BUILDDIR)
 
