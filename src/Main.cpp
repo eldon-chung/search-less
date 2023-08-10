@@ -410,10 +410,6 @@ bool Main::run_main() {
     case Command::INTERRUPT: {
         if (m_following_eof) {
             m_following_eof = false;
-            {
-                std::scoped_lock lock(m_nc_mutex);
-                ungetch(69420);
-            }
         }
         m_search_result = std::future<size_t>();
         set_command("", 0);

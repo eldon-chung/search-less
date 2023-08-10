@@ -137,10 +137,9 @@ struct InputThread {
                 break;
             case 'F':
                 chan->push({Command::FOLLOW_EOF, "", {}, 1});
-                // wait for main to break us out
-                while (poll_and_getch() != 69420) {
-                    ; // only main can break us out
-                }
+                break;
+            case '\x03':
+                chan->push({Command::INTERRUPT});
                 break;
             case 'f':
             case CTRL('f'):
