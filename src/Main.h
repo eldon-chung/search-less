@@ -29,7 +29,6 @@ struct Main {
     constexpr static size_t npos = std::string::npos;
 
     Channel<Command> m_chan;
-    Channel<std::function<void(void)>> m_task_chan;
 
     std::stop_source m_file_task_stop_source;
     std::promise<void> m_file_task_promise;
@@ -40,7 +39,6 @@ struct Main {
     View m_view;
 
     InputThread m_input;
-    WorkerThread m_taskmaster;
 
     bool m_highlight_active;
 
@@ -53,6 +51,8 @@ struct Main {
     std::string m_search_pattern;
     size_t m_last_known_search_result;
     std::future<size_t> m_search_result;
+    std::stop_source m_search_stop;
+    WorkerThread m_search_worker;
 
     std::string m_status_str_buffer;
     std::string m_command_str_buffer;
@@ -74,10 +74,9 @@ struct Main {
           m_view(View::create(&m_nc_mutex, m_content_handle.get(), tty)),
           m_input(&m_nc_mutex, &m_chan, tty, std::move(history_filename),
                   history_maxsize),
-          m_taskmaster(&m_task_chan), m_highlight_active(false),
-          m_search_case(SearchCase::SENSITIVE), m_search_pattern(),
-          /* m_search_result({"", std::string::npos}), */
-          m_following_eof(false), m_time_commands(time_commands) {
+          m_highlight_active(false), m_search_case(SearchCase::SENSITIVE),
+          m_search_pattern(), m_search_worker(), m_following_eof(false),
+          m_time_commands(time_commands) {
         register_signal_handlers(&m_chan);
 
         display_page();
@@ -102,7 +101,6 @@ struct Main {
 
     ~Main() {
         m_chan.close();
-        m_task_chan.close();
         m_file_task_stop_source.request_stop();
     }
     Main(Main const &other) = delete;

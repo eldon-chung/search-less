@@ -138,7 +138,6 @@ bool Main::run_main() {
         break;
     case Command::QUIT:
         m_chan.close();
-        m_task_chan.close();
         m_file_task_stop_source.request_stop();
         return true;
     case Command::VIEW_LEFT:
@@ -307,15 +306,13 @@ bool Main::run_main() {
             end = m_last_known_search_result;
         }
 
-        std::promise<size_t> promise;
-        m_search_result = promise.get_future();
-        std::thread{[=, this, promise = std::move(promise)]() mutable {
-            promise.set_value(search_backward_n(
-                regex_search_last, std::max((size_t)1, command.payload_num),
-                m_content_handle->get_contents(), search_pattern, 0, end,
-                m_search_case != SearchCase::SENSITIVE));
-        }}.detach();
-
+        std::tie(m_search_result, m_search_stop) =
+            m_search_worker.spawn([=](std::stop_token) {
+                return search_backward_n(
+                    regex_search_last, std::max((size_t)1, command.payload_num),
+                    m_content_handle->get_contents(), search_pattern, 0, end,
+                    m_search_case != SearchCase::SENSITIVE);
+            });
         break;
     }
 
@@ -343,16 +340,14 @@ bool Main::run_main() {
             start = m_last_known_search_result + 1;
         }
 
-        std::promise<size_t> promise;
-        m_search_result = promise.get_future();
-        std::thread{[=, this, promise = std::move(promise)]() mutable {
-            promise.set_value(search_forward_n(
-                regex_search_first, std::max((size_t)1, command.payload_num),
-                m_content_handle->get_contents(), search_pattern, start,
-                m_content_handle->size(),
-                m_search_case != SearchCase::SENSITIVE));
-        }}.detach();
-
+        std::tie(m_search_result, m_search_stop) =
+            m_search_worker.spawn([=](std::stop_token) {
+                return search_forward_n(
+                    regex_search_last, std::max((size_t)1, command.payload_num),
+                    m_content_handle->get_contents(), search_pattern, start,
+                    m_content_handle->size(),
+                    m_search_case != SearchCase::SENSITIVE);
+            });
         break;
     }
 
@@ -366,15 +361,14 @@ bool Main::run_main() {
         m_last_known_search_result = npos;
         size_t start = m_view.get_starting_offset();
 
-        std::promise<size_t> promise;
-        m_search_result = promise.get_future();
-        std::thread{[=, this, promise = std::move(promise)]() mutable {
-            promise.set_value(regex_search_first(
-                m_content_handle->get_contents(), search_pattern, start,
-                m_content_handle->size(),
-                m_search_case != SearchCase::SENSITIVE));
-        }}.detach();
-
+        std::tie(m_search_result, m_search_stop) =
+            m_search_worker.spawn([=](std::stop_token) {
+                return search_forward_n(
+                    regex_search_last, std::max((size_t)1, command.payload_num),
+                    m_content_handle->get_contents(), search_pattern, start,
+                    m_content_handle->size(),
+                    m_search_case != SearchCase::SENSITIVE);
+            });
         break;
     }
     case Command::UPDATE_LINE_IDXS: {
