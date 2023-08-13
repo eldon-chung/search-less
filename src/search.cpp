@@ -82,9 +82,11 @@ flip_by_lines(std::string_view str) {
 
 } // namespace
 
-size_t basic_search_first(std::string_view file_contents,
-                          std::string_view pattern, size_t beginning_offset,
-                          size_t ending_offset, bool caseless /* = false */) {
+std::optional<size_t> basic_search_first(std::string_view file_contents,
+                                         std::string_view pattern,
+                                         size_t beginning_offset,
+                                         size_t ending_offset, bool caseless,
+                                         std::stop_token stop) {
 
     assert(!pattern.empty());
 
@@ -122,6 +124,9 @@ size_t basic_search_first(std::string_view file_contents,
         while (true) {
             if (ending_offset - beginning_offset < 4096 + pattern.length()) {
                 break;
+            }
+            if (stop.stop_requested()) {
+                return std::nullopt;
             }
             for (size_t iters = 0; iters < 4096; ++iters) {
                 if (memcmp(cur_approx_lower_file_ptr, approx_lower_pattern_ptr,
@@ -162,28 +167,43 @@ size_t basic_search_first(std::string_view file_contents,
 
         return std::string::npos;
     } else {
-        size_t pos = file_contents_substr.find(pattern);
-        if (pos == std::string::npos) {
-            return std::string::npos;
-        } else {
-            return pos + beginning_offset;
+        for (auto [chunk_start, chunk_end] :
+             chunks(file_contents, beginning_offset, ending_offset,
+                    4 * 1024 * 1024)) {
+            if (stop.stop_requested()) {
+                return std::nullopt;
+            }
+            size_t pos =
+                file_contents.substr(chunk_start, chunk_end - chunk_start)
+                    .find(pattern);
+            if (pos != std::string::npos) {
+                return pos + chunk_start;
+            }
         }
+        return std::string::npos;
     }
 }
 
-size_t basic_search_last(std::string_view file_contents,
-                         std::string_view pattern, size_t beginning_offset,
-                         size_t ending_offset, bool caseless /* = false */) {
+std::optional<size_t> basic_search_last(std::string_view file_contents,
+                                        std::string_view pattern,
+                                        size_t beginning_offset,
+                                        size_t ending_offset, bool caseless,
+                                        std::stop_token stop) {
     assert(caseless == false);
-    std::string_view sub_contents = file_contents.substr(
-        beginning_offset, ending_offset - beginning_offset);
+    for (auto [chunk_start, chunk_end] : chunks(
+             file_contents, beginning_offset, ending_offset, 4 * 1024 * 1024)) {
+        if (stop.stop_requested()) {
+            return std::nullopt;
+        }
+        std::string_view sub_contents =
+            file_contents.substr(chunk_start, chunk_end - chunk_start);
 
-    size_t result = sub_contents.rfind(pattern);
-    if (result == std::string::npos) {
-        return result;
-    } else {
-        return beginning_offset + result;
+        size_t result = sub_contents.rfind(pattern);
+        if (result != std::string::npos) {
+            return result + chunk_start;
+        }
     }
+    return std::string::npos;
 }
 
 namespace pcre2 {
@@ -225,15 +245,20 @@ std::optional<std::pair<size_t, size_t>> match(const Code &code,
 
 } // namespace pcre2
 
-size_t regex_search_first(std::string_view file_contents,
-                          std::string_view pattern, size_t beginning_offset,
-                          size_t ending_offset, bool caseless /* =false */) {
+std::optional<size_t> regex_search_first(std::string_view file_contents,
+                                         std::string_view pattern,
+                                         size_t beginning_offset,
+                                         size_t ending_offset, bool caseless,
+                                         std::stop_token stop) {
     assert(caseless == false);
     pcre2::Code re = pcre2::compile(pattern);
 
     // split into line-aligned 4MB chunks
     for (auto [chunk_start, chunk_end] : chunks(
              file_contents, beginning_offset, ending_offset, 4 * 1024 * 1024)) {
+        if (stop.stop_requested()) {
+            return std::nullopt;
+        }
         std::optional<std::pair<size_t, size_t>> ret = pcre2::match(
             re, file_contents.substr(chunk_start, chunk_end - chunk_start));
         if (ret) {
@@ -243,9 +268,11 @@ size_t regex_search_first(std::string_view file_contents,
     return std::string_view::npos;
 }
 
-size_t regex_search_last(std::string_view file_contents,
-                         std::string_view pattern, size_t beginning_offset,
-                         size_t ending_offset, bool caseless /* =false */) {
+std::optional<size_t> regex_search_last(std::string_view file_contents,
+                                        std::string_view pattern,
+                                        size_t beginning_offset,
+                                        size_t ending_offset, bool caseless,
+                                        std::stop_token stop) {
     assert(caseless == false);
     pcre2::Code re = pcre2::compile(pattern);
 
@@ -254,6 +281,9 @@ size_t regex_search_last(std::string_view file_contents,
         chunks(file_contents, beginning_offset, ending_offset, 4 * 1024 * 1024);
     for (auto it = ch.rbegin(); it != ch.rend(); ++it) {
         auto [chunk_start, chunk_end] = *it;
+        if (stop.stop_requested()) {
+            return std::nullopt;
+        }
         std::optional<std::pair<size_t, size_t>> ret = pcre2::match(
             re, file_contents.substr(chunk_start, chunk_end - chunk_start));
         if (ret) {

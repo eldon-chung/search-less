@@ -31,9 +31,10 @@ void Main::update_screen_highlight_offsets() {
         size_t line_base_offset = page.get_nth_offset(idx);
 
         // this is already relative to our visual line
-        auto line_offsets = search_all(regex_search_first, page_line,
-                                       m_search_pattern, 0, page_line.size(),
-                                       m_search_case != SearchCase::SENSITIVE);
+        std::vector<size_t> line_offsets = *search_all(
+            regex_search_first, page_line, m_search_pattern, 0,
+            page_line.size(), m_search_case != SearchCase::SENSITIVE,
+            std::stop_token());
         line_highlights.clear();
         line_highlights.reserve(line_offsets.size());
 
@@ -79,14 +80,18 @@ bool Main::run_main() {
     if (m_search_result.valid() &&
         m_search_result.wait_for(std::chrono::nanoseconds{0}) ==
             std::future_status::ready) {
-        size_t result = m_search_result.get();
-        if (result == m_content_handle->size() || result == std::string::npos) {
+        std::optional<size_t> result = m_search_result.get();
+        if (!result) {
+            return false;
+        }
+        if (*result == m_content_handle->size() ||
+            *result == std::string::npos) {
             // this needs to change depending on whether there was
             // already a search being done
             set_status("Pattern not found");
         } else {
-            m_last_known_search_result = result;
-            m_view.move_to_byte_offset(result);
+            m_last_known_search_result = *result;
+            m_view.move_to_byte_offset(*result);
         }
         display_page();
         /* m_chan.push(Command{Command::QUIT}); */
@@ -307,11 +312,11 @@ bool Main::run_main() {
         }
 
         std::tie(m_search_result, m_search_stop) =
-            m_search_worker.spawn([=](std::stop_token) {
+            m_search_worker.spawn([=](std::stop_token stop) {
                 return search_backward_n(
                     regex_search_last, std::max((size_t)1, command.payload_num),
                     m_content_handle->get_contents(), search_pattern, 0, end,
-                    m_search_case != SearchCase::SENSITIVE);
+                    m_search_case != SearchCase::SENSITIVE, stop);
             });
         break;
     }
@@ -341,12 +346,13 @@ bool Main::run_main() {
         }
 
         std::tie(m_search_result, m_search_stop) =
-            m_search_worker.spawn([=](std::stop_token) {
+            m_search_worker.spawn([=](std::stop_token stop) {
                 return search_forward_n(
-                    regex_search_last, std::max((size_t)1, command.payload_num),
+                    regex_search_first,
+                    std::max((size_t)1, command.payload_num),
                     m_content_handle->get_contents(), search_pattern, start,
                     m_content_handle->size(),
-                    m_search_case != SearchCase::SENSITIVE);
+                    m_search_case != SearchCase::SENSITIVE, stop);
             });
         break;
     }
@@ -362,12 +368,13 @@ bool Main::run_main() {
         size_t start = m_view.get_starting_offset();
 
         std::tie(m_search_result, m_search_stop) =
-            m_search_worker.spawn([=](std::stop_token) {
+            m_search_worker.spawn([=](std::stop_token stop) {
                 return search_forward_n(
-                    regex_search_last, std::max((size_t)1, command.payload_num),
+                    regex_search_first,
+                    std::max((size_t)1, command.payload_num),
                     m_content_handle->get_contents(), search_pattern, start,
                     m_content_handle->size(),
-                    m_search_case != SearchCase::SENSITIVE);
+                    m_search_case != SearchCase::SENSITIVE, stop);
             });
         break;
     }
@@ -393,7 +400,7 @@ bool Main::run_main() {
     case Command::SEARCH_CLEAR: {
         m_search_pattern = "";
         m_last_known_search_result = npos;
-        m_search_result = std::future<size_t>();
+        m_search_result = std::future<std::optional<size_t>>();
         set_command("", 0);
         m_highlight_active = false;
         set_status("Search cleared.");
@@ -405,7 +412,7 @@ bool Main::run_main() {
         if (m_following_eof) {
             m_following_eof = false;
         }
-        m_search_result = std::future<size_t>();
+        m_search_result = std::future<std::optional<size_t>>();
         set_command("", 0);
         set_status("");
         break;

@@ -50,7 +50,7 @@ struct Main {
     SearchCase m_search_case;
     std::string m_search_pattern;
     size_t m_last_known_search_result;
-    std::future<size_t> m_search_result;
+    std::future<std::optional<size_t>> m_search_result;
     std::stop_source m_search_stop;
     WorkerThread m_search_worker;
 
