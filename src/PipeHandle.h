@@ -39,27 +39,16 @@ class PipeHandle final : public ContentHandle {
 
         m_temp_fd = temp_fd;
 
-        // start with stuff to read if possible
-        // TODO: add some form of timeout perhaps
-        while (true) {
-            if (read_to_eof()) {
-                break;
-            }
-        }
+        // read some stuff if possible, just give up if not possible
+        read_to_eof();
     }
 
   private:
-    ssize_t read_into_temp(size_t num_to_read = 1 * 1024 * 1024 * 1024) {
-
-        // get the temp file size
-        // so we know where to start writing to the file
-        struct stat statbuf;
-        fstat(m_temp_fd, &statbuf);
-        off_t offset = (off_t)statbuf.st_size;
-
+    ssize_t read_into_temp(std::shared_lock<std::shared_mutex> &lock,
+                           size_t num_to_read = 1 * 1024 * 1024 * 1024) {
         // splice from m_pipe_fd into temp file
-        ssize_t ret_val = splice(m_pipe_fd, NULL, m_temp_fd, &offset,
-                                 num_to_read, SPLICE_F_NONBLOCK);
+        ssize_t ret_val = splice(m_pipe_fd, NULL, m_temp_fd, NULL, num_to_read,
+                                 SPLICE_F_NONBLOCK);
 
         // if nothing was read, we just return
         if (ret_val == 0) {
@@ -74,11 +63,10 @@ class PipeHandle final : public ContentHandle {
             exit(1);
         }
 
-        // get the temp file size again so we can remap
-        // into m_contents
-        fstat(m_temp_fd, &statbuf);
-        size_t curr_file_size = (size_t)statbuf.st_size;
-
+        if (!lock.owns_lock()) {
+            lock.lock();
+        }
+        size_t curr_file_size = m_contents.size() + (size_t)ret_val;
         char *new_contents_ptr =
             m_contents.data()
                 ? (char *)mremap((void *)m_contents.data(), m_contents.size(),
@@ -95,30 +83,20 @@ class PipeHandle final : public ContentHandle {
         return ret_val;
     }
 
-    void read_to_eof_into_temp() {
-        ssize_t num_read = 0;
-        do {
-            num_read = read_into_temp();
-        } while (num_read != 0);
-    }
-
   public:
     bool read_more() final {
+        std::shared_lock<std::shared_mutex> lock(m_mutex, std::defer_lock);
         ssize_t total_read = 0;
         ssize_t num_read = 0;
         do {
-            num_read = read_into_temp();
+            num_read = read_into_temp(lock);
             total_read += num_read;
         } while (num_read != 0);
         return total_read != 0;
     }
 
     bool read_to_eof() final {
-        bool has_more = false;
-        while (read_more()) {
-            has_more = true;
-        }
-        return has_more;
+        return read_more();
     }
 
     std::string_view get_path() const final {

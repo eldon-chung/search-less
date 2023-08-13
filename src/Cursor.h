@@ -1,5 +1,7 @@
 #pragma once
 
+#include <assert.h>
+
 #include "ContentHandle.h"
 
 struct Cursor {
@@ -22,9 +24,10 @@ struct Cursor {
 
         LineIt(ContentHandle *content_handle, size_t offset)
             : m_content_handle(content_handle), m_offset(offset) {
-            size_t next_pos =
-                m_content_handle->get_contents().find_first_of("\n", m_offset);
-            if (next_pos == std::string::npos) {
+            auto content_guard = m_content_handle->get_contents();
+            std::string_view contents = content_guard.contents;
+            size_t next_pos = contents.find_first_of("\n", m_offset);
+            if (next_pos == std::string_view::npos) {
                 m_width = m_content_handle->size() - m_offset;
             } else {
                 m_width = next_pos - m_offset + 1;
@@ -32,7 +35,8 @@ struct Cursor {
         }
 
         std::string_view get_line() const {
-            return m_content_handle->get_contents().substr(m_offset, m_width);
+            return m_content_handle->get_contents().contents.substr(m_offset,
+                                                                    m_width);
         }
 
         size_t line_begin_offset() const {
@@ -56,13 +60,14 @@ struct Cursor {
             // note: eventually need to update this to read more of the current
             // file if required?
             size_t next_line_end_pos =
-                m_content_handle->get_contents().find_first_of(
+                m_content_handle->get_contents().contents.find_first_of(
                     "\n", m_offset + m_width);
             // move offset up by width
             m_offset += m_width;
-            if (next_line_end_pos == std::string::npos) {
+            if (next_line_end_pos == std::string_view::npos) {
                 // update width to include whatever is remaining
-                m_width = m_content_handle->get_contents().size() - m_offset;
+                m_width =
+                    m_content_handle->get_contents().contents.size() - m_offset;
             } else {
                 // update width to include the new line
                 m_width = next_line_end_pos - m_offset + 1;
@@ -84,10 +89,10 @@ struct Cursor {
 
             assert(m_offset >= 1);
             size_t prev_line_end_pos = m_content_handle->get_contents()
-                                           .substr(0, m_offset - 1)
+                                           .contents.substr(0, m_offset - 1)
                                            .find_last_of("\n");
 
-            if (prev_line_end_pos == std::string::npos) {
+            if (prev_line_end_pos == std::string_view::npos) {
                 // we're on the 1st line scrolling back to the 0th line
                 m_width = m_offset;
                 m_offset = 0;
@@ -137,9 +142,13 @@ struct Cursor {
 
     // Get the contents of the line from the cursor to the end of the line
     // (\n)
+    // NOTE: idk if we'll revive this method, but this method can't be
+    // efficiently implemented with the content guard thingy
+#if 0
     [[nodiscard]] std::string_view get_contents() const {
         return m_content_handle->get_contents().substr(m_offset);
     }
+#endif
 
     [[nodiscard]] size_t operator-(const Cursor &other) const {
         return m_offset - other.get_offset();

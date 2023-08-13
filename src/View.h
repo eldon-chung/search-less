@@ -93,8 +93,8 @@ struct View {
           m_main_window_width((size_t)width), m_content_handle(content_handle),
           m_wrap_lines(true),
           m_page(Page::get_page_at_byte_offset(
-              m_content_handle->get_contents(), 0, m_main_window_height,
-              m_main_window_width, m_wrap_lines))
+              m_content_handle->get_contents().contents, 0,
+              m_main_window_height, m_main_window_width, m_wrap_lines))
 
     {
     }
@@ -145,20 +145,24 @@ struct View {
     }
 
     void scroll_up(size_t num_scrolls = 1) {
+        auto content_guard = m_content_handle->get_contents();
+        std::string_view contents = content_guard.contents;
         while (num_scrolls-- > 0 && m_page.has_prev()) {
-            m_page.scroll_up(m_content_handle->get_contents());
+            m_page.scroll_up(contents);
         }
     }
 
     void scroll_down(size_t num_scrolls = 1) {
+        auto content_guard = m_content_handle->get_contents();
+        std::string_view contents = content_guard.contents;
         while (num_scrolls-- > 0) {
-            if (m_page.has_next(m_content_handle->get_contents())) {
-                m_page.scroll_down(m_content_handle->get_contents());
+            if (m_page.has_next(contents)) {
+                m_page.scroll_down(contents);
             } else if (m_content_handle->has_changed()) {
                 size_t offset = m_page.get_begin_offset();
                 m_content_handle->read_more();
                 move_to_byte_offset(offset);
-                m_page.scroll_down(m_content_handle->get_contents());
+                m_page.scroll_down(contents);
             } else {
                 break;
             }
@@ -170,19 +174,21 @@ struct View {
     }
 
     void move_to_end() {
-        if (m_content_handle->get_contents().empty()) {
+        auto content_guard = m_content_handle->get_contents();
+        std::string_view contents = content_guard.contents;
+        if (contents.empty()) {
             return;
         }
         // in the case of eof we don't scroll to the right because we
         // expect to see the last line
-        move_to_byte_offset(m_content_handle->get_contents().length() - 1,
-                            false);
+        move_to_byte_offset(contents.length() - 1, false);
     }
 
     void move_to_byte_offset(size_t offset, bool auto_chunk_index = true) {
         m_page = Page::get_page_at_byte_offset(
-            m_content_handle->get_contents(), offset, m_main_window_height,
-            m_main_window_width, m_wrap_lines, auto_chunk_index);
+            m_content_handle->get_contents().contents, offset,
+            m_main_window_height, m_main_window_width, m_wrap_lines,
+            auto_chunk_index);
     }
 
     size_t get_starting_offset() const {
@@ -221,14 +227,15 @@ struct View {
         werase(m_main_window_ptr);
 
         Page page = current_page();
+        auto content_guard = m_content_handle->get_contents();
+        std::string_view contents = content_guard.contents;
         // assert(highlight_list.size() == page.get_num_lines());
 
         std::string curr_line;
         curr_line.reserve(m_main_window_width);
         for (size_t row_idx = 0; row_idx < m_main_window_height; ++row_idx) {
             if (row_idx < page.get_num_lines()) {
-                curr_line = page.get_nth_line(m_content_handle->get_contents(),
-                                              row_idx);
+                curr_line = page.get_nth_line(contents, row_idx);
                 mvwaddnstr(m_main_window_ptr, row_idx, 0, curr_line.data(),
                            std::min(curr_line.size(), m_main_window_width));
             } else {
@@ -321,7 +328,7 @@ struct View {
 
         size_t curr_offset = m_page.get_begin_offset();
         m_page = Page::get_page_at_byte_offset(
-            m_content_handle->get_contents(), curr_offset, m_main_window_height,
-            m_main_window_width, m_wrap_lines);
+            m_content_handle->get_contents().contents, curr_offset,
+            m_main_window_height, m_main_window_width, m_wrap_lines);
     }
 };

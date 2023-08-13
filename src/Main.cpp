@@ -19,6 +19,7 @@
 // "scoped globals" in this way. perhaps we should make
 // this a static method that takes in params
 void Main::update_screen_highlight_offsets() {
+    auto content_guard = m_content_handle->get_contents();
     Page page = m_view.current_page();
 
     // clear our highlight offsets
@@ -26,8 +27,7 @@ void Main::update_screen_highlight_offsets() {
 
     std::vector<View::Highlight> line_highlights;
     for (size_t idx = 0; idx < page.get_num_lines(); ++idx) {
-        auto page_line =
-            page.get_nth_line(m_content_handle->get_contents(), idx);
+        auto page_line = page.get_nth_line(content_guard.contents, idx);
         size_t line_base_offset = page.get_nth_offset(idx);
 
         // this is already relative to our visual line
@@ -195,6 +195,7 @@ bool Main::run_main() {
         }
         break;
     case Command::VIEW_EOF:
+        m_search_stop.request_stop();
         if (m_content_handle->has_changed()) {
             // If the pipe is fast (it refills within 10ms), then read more.
             // However have a hard cutoff of 1s so it doesn't hang for
@@ -203,6 +204,8 @@ bool Main::run_main() {
             while (m_content_handle->read_to_eof() &&
                    std::chrono::steady_clock::now() - start <
                        std::chrono::seconds(1)) {
+                m_view.move_to_end();
+                display_page();
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
         }
@@ -296,7 +299,8 @@ bool Main::run_main() {
             break;
         }
 
-        std::string_view contents = m_content_handle->get_contents();
+        auto content_guard = m_content_handle->get_contents();
+        std::string_view contents = content_guard.contents;
         if (contents.empty()) {
             break;
         }
@@ -315,7 +319,7 @@ bool Main::run_main() {
             m_search_worker.spawn([=](std::stop_token stop) {
                 return search_backward_n(
                     regex_search_last, std::max((size_t)1, command.payload_num),
-                    m_content_handle->get_contents(), search_pattern, 0, end,
+                    contents, search_pattern, 0, end,
                     m_search_case != SearchCase::SENSITIVE, stop);
             });
         break;
@@ -334,6 +338,11 @@ bool Main::run_main() {
         }
 
         // we are guaranteed they will be initialised
+        auto content_guard = m_content_handle->get_contents();
+        std::string_view contents = content_guard.contents;
+        if (contents.empty()) {
+            break;
+        }
 
         std::string search_pattern = m_search_pattern;
         size_t start;
@@ -349,9 +358,8 @@ bool Main::run_main() {
             m_search_worker.spawn([=](std::stop_token stop) {
                 return search_forward_n(
                     regex_search_first,
-                    std::max((size_t)1, command.payload_num),
-                    m_content_handle->get_contents(), search_pattern, start,
-                    m_content_handle->size(),
+                    std::max((size_t)1, command.payload_num), contents,
+                    search_pattern, start, m_content_handle->size(),
                     m_search_case != SearchCase::SENSITIVE, stop);
             });
         break;
@@ -362,6 +370,12 @@ bool Main::run_main() {
         set_status("");
         m_highlight_active = true;
 
+        auto content_guard = m_content_handle->get_contents();
+        std::string_view contents = content_guard.contents;
+        if (contents.empty()) {
+            break;
+        }
+
         std::string search_pattern = command.payload_str;
         m_search_pattern = search_pattern;
         m_last_known_search_result = npos;
@@ -371,9 +385,8 @@ bool Main::run_main() {
             m_search_worker.spawn([=](std::stop_token stop) {
                 return search_forward_n(
                     regex_search_first,
-                    std::max((size_t)1, command.payload_num),
-                    m_content_handle->get_contents(), search_pattern, start,
-                    m_content_handle->size(),
+                    std::max((size_t)1, command.payload_num), contents,
+                    search_pattern, start, m_content_handle->size(),
                     m_search_case != SearchCase::SENSITIVE, stop);
             });
         break;
@@ -499,6 +512,8 @@ int main(int argc, char **argv) {
 
 void Main::run_follow_eof() {
     if (m_content_handle->has_changed()) {
+        // Cancel existing search so this doesn't hang
+        m_search_stop.request_stop();
         m_content_handle->read_to_eof();
     }
     m_view.move_to_end();

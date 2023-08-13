@@ -49,9 +49,14 @@ class FileHandle final : public ContentHandle {
     bool read_more() final {
         // if there is more to the file, we should read into m_contents
         size_t curr_file_size = current_file_size();
-        if (curr_file_size == m_contents.size()) {
-            return false;
+        {
+            std::shared_lock lock(m_mutex);
+            if (curr_file_size == m_contents.size()) {
+                return false;
+            }
         }
+
+        std::scoped_lock lock2(m_mutex);
 
         // potentially needs an unmap.
         if (m_contents.data()) {
@@ -67,6 +72,7 @@ class FileHandle final : public ContentHandle {
     }
 
     std::string_view get_path() const final {
+        std::shared_lock lock(m_mutex);
         return m_path;
     }
 
@@ -75,7 +81,9 @@ class FileHandle final : public ContentHandle {
     }
 
     bool has_changed() const final {
-        return m_contents.size() != current_file_size();
+        size_t curr_file_size = current_file_size();
+        std::shared_lock lock(m_mutex);
+        return m_contents.size() != curr_file_size;
     }
 
   private:
